@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>วันนี้กินอะไรดี?</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app" aria-labelledby="page-title">
+      <section class="picker">
+        <p class="kicker">Meal Picker for N' Ploy</p>
+        <h1 id="page-title">วันนี้กินอะไรดี?</h1>
+        <p class="subtitle">มาสุ่มกันนนน</p>
+
+        <div class="result" aria-live="polite">
+          <span id="categoryTag" class="tag">กดสุ่มก่อนนะ</span>
+          <p id="menuName" class="menu-name">ยังไม่ได้เลือกเมนู</p>
+          <p id="cuteMessage" class="message">พร้อมดูแลมื้อนี้แล้ว</p>
+        </div>
+
+        <div class="actions">
+          <button id="randomButton" class="primary-button" type="button">
+            สุ่มเมนูให้เธอ
+          </button>
+          <button id="copyButton" class="copy-button" type="button" disabled>
+            คัดลอกเมนู
+          </button>
+        </div>
+        <button
+          id="toggleListButton"
+          class="list-toggle"
+          type="button"
+          aria-expanded="false"
+          aria-controls="menuPanel"
+        >
+          ดูลิสต์เมนู
+        </button>
+
+        <section id="menuPanel" class="menu-panel" hidden>
+          <form id="menuForm" class="menu-form">
+            <input
+              id="newMenuName"
+              type="text"
+              placeholder="เพิ่มเมนูใหม่"
+              aria-label="ชื่อเมนูใหม่"
+              required
+            />
+            <select id="newMenuCategory" aria-label="หมวดหมู่เมนูใหม่">
+              <option value="comfort">comfort</option>
+              <option value="อิ่มหนัก">อิ่มหนัก</option>
+              <option value="ญี่ปุ่น">ญี่ปุ่น</option>
+              <option value="เกาหลี">เกาหลี</option>
+              <option value="เส้น">เส้น</option>
+              <option value="healthy-ish">healthy-ish</option>
+            </select>
+            <button class="add-button" type="submit">เพิ่ม</button>
+          </form>
+
+          <ul id="menuList" class="menu-list" aria-label="รายการเมนู"></ul>
+        </section>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
