@@ -47,9 +47,6 @@ const cuteMessage = document.querySelector("#cuteMessage");
 const result = document.querySelector(".result");
 const toggleListButton = document.querySelector("#toggleListButton");
 const menuPanel = document.querySelector("#menuPanel");
-const menuForm = document.querySelector("#menuForm");
-const newMenuName = document.querySelector("#newMenuName");
-const newMenuCategory = document.querySelector("#newMenuCategory");
 const menuList = document.querySelector("#menuList");
 
 let selectedMenu = "";
@@ -67,33 +64,18 @@ function replayAnimation() {
 function renderMenuList() {
   menuList.innerHTML = "";
 
-  menus.forEach((menu, index) => {
+  menus.forEach((menu) => {
     const item = document.createElement("li");
     item.className = "menu-item";
 
-    const detail = document.createElement("div");
     const name = document.createElement("strong");
     const tag = document.createElement("span");
-    const removeButton = document.createElement("button");
 
     name.textContent = menu.name;
     tag.className = "tag";
     tag.textContent = menu.category;
-    removeButton.className = "remove-button";
-    removeButton.type = "button";
-    removeButton.textContent = "ลบ";
-    removeButton.addEventListener("click", () => {
-      menus.splice(index, 1);
-      renderMenuList();
 
-      if (selectedMenu === menu.name) {
-        selectedMenu = "";
-        copyButton.disabled = true;
-      }
-    });
-
-    detail.append(name, tag);
-    item.append(detail, removeButton);
+    item.append(name, tag);
     menuList.append(item);
   });
 }
@@ -130,20 +112,6 @@ toggleListButton.addEventListener("click", () => {
   if (isHidden) {
     renderMenuList();
   }
-});
-
-menuForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-
-  const name = newMenuName.value.trim();
-  const category = newMenuCategory.value;
-
-  if (!name) return;
-
-  menus.push({ name, category });
-  newMenuName.value = "";
-  renderMenuList();
-  newMenuName.focus();
 });
 
 copyButton.addEventListener("click", async () => {
