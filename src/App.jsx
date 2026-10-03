@@ -3,6 +3,7 @@ import { Heart, Utensils, CakeSlice, CookingPot, Shuffle, Copy, Check, ChevronDo
   Plus, ArrowUpRight, Users, ShoppingBasket, List, Search, X, LoaderCircle, LockKeyhole, Download, Pencil, Trash2, Save, SlidersHorizontal } from "lucide-react";
 import { foodMenus, snackMenus, homeMenus } from "./menus.js";
 import { validateRecipe, validateMenu, recipeText } from "./recipe-schema.js";
+import { menuArt } from "./menu-art.js";
 
 const modes = [
   { id: "food", label: "สั่งอาหาร", icon: Utensils, note: "มื้ออร่อย ส่งถึงเธอ", empty: "มื้อนี้ให้เราเลือกนะ" },
@@ -175,16 +176,18 @@ export default function App() {
   return <div className="app-shell">
     <header className="site-header"><a className="brand" href="#"><Heart size={20} fill="currentColor" /> Meal Picker <span className="brand-sub">for you</span></a><span className="small-label"><Heart size={13} /> made with love</span></header>
     <main className="main-content">
-      <div className="intro"><img className="intro-art" src="/menu-love.webp" alt="" width="140" height="140" /><p className="eyebrow">A LITTLE LESS THINKING, A LITTLE MORE US</p><h1>วันนี้กินอะไรดี?</h1><p className="muted">มาสุ่มกันนนน</p></div>
+      <div className="intro"><p className="eyebrow"><Heart size={12} fill="currentColor" /> A LITTLE LESS THINKING, A LITTLE MORE US</p><h1>วันนี้กินอะไรดี?</h1><p className="muted">มาสุ่มกันนนน</p></div>
       <div className="mode-tabs" role="group" aria-label="เลือกหมวดเมนู">{modes.map(({ id, label, icon: Icon }) => <button type="button" key={id} aria-pressed={mode === id} onClick={() => changeMode(id)}><Icon size={18} /><span>{label}</span></button>)}</div>
       <div className="mode-meta"><span>{active.note}</span><span>{menus.length} เมนู{home && " · 2 คน"}</span></div>
       <div className="filter-bar"><SlidersHorizontal size={16} /><select aria-label="เลือกแท็กสำหรับสุ่ม" value={tag} onChange={(event) => { generation.current += 1; setTag(event.target.value); setSelected(null); setMessage(""); setCopyState(""); }}><option value="">ทุกแท็ก</option>{tags.map((value) => <option key={value} value={value}>{value}</option>)}</select>{tag && <span>{pool.length} เมนู</span>}</div>
       <section className={`picker-result ${home ? "home-result" : mode === "snacks" ? "snack-result" : ""}`} aria-live="polite">
         <div key={revision} className="result-content">
-          <div className="result-symbol" aria-hidden="true">{home ? <CookingPot size={35} /> : mode === "snacks" ? <CakeSlice size={35} /> : <Utensils size={35} />}</div>
+          <div className="result-topline"><span className="result-kicker">{selected ? "เมนูนี้… เลือกให้เธอ" : home ? "เข้าครัวด้วยกัน" : mode === "snacks" ? "เวลาของความหวาน" : "มื้ออร่อยของเรา"}</span><Heart size={18} fill="currentColor" aria-hidden="true" /></div>
+          <div className="result-art" aria-hidden="true"><img src={`/menu-${menuArt(selected, mode)}.webp`} alt="" width="180" height="150" /></div>
           <span className="tag">{selected?.category || (home ? "สำหรับเราสองคน" : mode === "snacks" ? "a little sweet treat" : "a little comfort food")}</span>
           <h2>{selected?.name || (loadState === "ready" && !pool.length ? "เพิ่มเมนูแรกของเรากัน" : active.empty)}</h2>
           <p className="result-message">{message || "วันนี้ไม่ต้องคิดเยอะ เดี๋ยวเลือกให้เอง"}</p>
+          {home && <span className="result-servings"><Users size={14} /> สำหรับเราสองคน</span>}
         </div>
       </section>
       <div className="result-actions"><button className="button-primary" type="button" disabled={!pool.length || loadState === "loading"} onClick={randomize}>{loadState === "loading" ? <LoaderCircle className="spin" size={20} /> : <Shuffle size={20} />} สุ่มเมนูให้เธอ</button><button className="icon-button copy-button" type="button" title={home ? "คัดลอกสูตรและวัตถุดิบ" : "คัดลอกเมนู"} aria-label={home ? "คัดลอกสูตรและวัตถุดิบ" : "คัดลอกเมนู"} disabled={!selected} onClick={copy}>{copyState === "คัดลอกแล้ว" ? <Check size={20} /> : <Copy size={20} />}</button></div>
