@@ -1,55 +1,14 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="th">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fcfcfa" />
+    <meta name="description" content="สุ่มอาหาร ของกินเล่น และสูตรทำกินเองสำหรับสองคน" />
     <title>วันนี้กินอะไรดี?</title>
-    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main class="app" aria-labelledby="page-title">
-      <section class="picker">
-        <p class="kicker">Meal Picker for You</p>
-        <h1 id="page-title">วันนี้กินอะไรดี?</h1>
-        <p class="subtitle">มาสุ่มกันนนน</p>
-
-        <div class="category-switch">
-          <span id="pickerTypeLabel">หมวด: อาหาร</span>
-          <button id="categorySwitchButton" class="category-button" type="button">
-            เปลี่ยนเป็นของกินเล่น
-          </button>
-        </div>
-
-        <div class="result" aria-live="polite">
-          <span id="categoryTag" class="tag">กดสุ่มก่อนนะ</span>
-          <p id="menuName" class="menu-name">ยังไม่ได้เลือกเมนู</p>
-          <p id="cuteMessage" class="message">พร้อมดูแลมื้อนี้แล้ว</p>
-        </div>
-
-        <div class="actions">
-          <button id="randomButton" class="primary-button" type="button">
-            สุ่มเมนูให้เธอ
-          </button>
-          <button id="copyButton" class="copy-button" type="button" disabled>
-            คัดลอกเมนู
-          </button>
-        </div>
-        <button
-          id="toggleListButton"
-          class="list-toggle"
-          type="button"
-          aria-expanded="false"
-          aria-controls="menuPanel"
-        >
-          ดูลิสต์เมนู
-        </button>
-
-        <section id="menuPanel" class="menu-panel" hidden>
-          <ul id="menuList" class="menu-list" aria-label="รายการเมนู"></ul>
-        </section>
-      </section>
-    </main>
-
-    <script src="script.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
