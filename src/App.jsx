@@ -143,7 +143,7 @@ export default function App() {
     if (!recipe) { setFormOpen(false); return; }
     setBusy(true);
     try {
-      const saved = await api("/api/recipes", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${password}` }, body: JSON.stringify(recipe) });
+      const saved = await api("/api/recipes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...recipe, password }) });
       // Refresh the shared list to include recipes added from other devices.
       await loadRecipes();
       setFormOpen(false); choose(saved); setNotice("บันทึกสูตรแล้ว เปิดดูได้จากทุกอุปกรณ์");

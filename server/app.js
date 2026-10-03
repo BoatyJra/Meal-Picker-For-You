@@ -35,7 +35,9 @@ app.post("/api/recipes", async (req, res) => {
   attempts.set(address, bucket);
   if (++bucket.count > 30) return res.status(429).json({ error: "ลองใหม่อีกครั้งในหนึ่งนาที" });
   const authorization = req.get("authorization") || "";
-  const received = Buffer.from(authorization.startsWith("Bearer ") ? authorization.slice(7) : "");
+  // JSON supports Unicode passwords; accept legacy headers for cached clients.
+  const password = typeof req.body?.password === "string" ? req.body.password : authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  const received = Buffer.from(password);
   const secret = Buffer.from(expected);
   if (received.length !== secret.length || !timingSafeEqual(received, secret)) return res.status(401).json({ error: "รหัสผ่านไม่ถูกต้อง" });
   const error = validateRecipe(req.body);

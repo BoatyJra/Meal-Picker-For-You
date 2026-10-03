@@ -8,7 +8,8 @@ import path from "node:path";
 import net from "node:net";
 
 for (const entry of ["server/index.js", "tests/serve-functions.js"]) {
-test(`${entry}: authentication, validation, duplicate detection, and restart persistence`, async () => {
+for (const ownerPassword of ["test-owner-password", "รหัสผ่านของเรา💖"]) {
+test(`${entry} (${ownerPassword === "test-owner-password" ? "ASCII" : "Unicode"} password): authentication, validation, duplicate detection, and restart persistence`, async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "meal-picker-api-"));
   const port = await new Promise((resolve) => {
     const socket = net.createServer();
@@ -19,7 +20,7 @@ test(`${entry}: authentication, validation, duplicate detection, and restart per
   let errors = "";
   async function start() {
     server = spawn(process.execPath, [entry], {
-      env: { ...process.env, PORT: String(port), DATA_DIR: directory, RECIPE_PASSWORD: "test-owner-password", TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "", VERCEL: "" },
+      env: { ...process.env, PORT: String(port), DATA_DIR: directory, RECIPE_PASSWORD: ownerPassword, TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "", VERCEL: "" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     server.stderr.on("data", (chunk) => { errors += chunk.toString(); });
@@ -37,20 +38,22 @@ test(`${entry}: authentication, validation, duplicate detection, and restart per
     await exited;
   }
   const recipe = { name: "Test recipe", video: "https://www.tiktok.com/@cook/video/123", ingredients: ["Chicken 300 g"], steps: ["Cook thoroughly"] };
-  const post = (body, password = "test-owner-password") => fetch(`${url}/api/recipes`, {
-    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${password}` }, body: JSON.stringify(body),
+  const post = (body, password = ownerPassword) => fetch(`${url}/api/recipes`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, password }),
   });
   try {
     await start();
     const initial = await (await fetch(`${url}/api/recipes`)).json();
     assert.equal(initial.length, 8);
     assert.equal((await post(recipe, "incorrect")).status, 401);
+    assert.equal((await post(recipe, null)).status, 401);
     assert.equal((await post({ ...recipe, video: "https://tiktok.com.evil.example/video/123" })).status, 400);
     assert.equal((await post({ ...recipe, ingredients: [] })).status, 400);
     const response = await post(recipe);
     assert.equal(response.status, 201);
     const saved = await response.json();
     assert.ok(saved.id);
+    assert.equal(Object.hasOwn(saved, "password"), false);
     assert.equal((await post(recipe)).status, 409);
     await stop();
     await start();
@@ -58,11 +61,13 @@ test(`${entry}: authentication, validation, duplicate detection, and restart per
     assert.equal(reloaded.length, 9);
     assert.deepEqual(reloaded.find((item) => item.id === saved.id).ingredients, recipe.ingredients);
     assert.equal(reloaded.find((item) => item.id === saved.id).video, recipe.video);
+    assert.equal(Object.hasOwn(reloaded.find((item) => item.id === saved.id), "password"), false);
   } finally {
     await stop();
     await rm(directory, { recursive: true, force: true });
   }
 });
+}
 }
 
 test("Vercel refuses temporary local storage when Turso credentials are missing", () => {
