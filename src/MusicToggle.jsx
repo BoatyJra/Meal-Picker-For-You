@@ -1,83 +1,115 @@
 import { useEffect, useRef, useState } from "react";
 import { Volume2, VolumeX, LoaderCircle } from "lucide-react";
-import { createKitchenMusic } from "./kitchen-music.js";
+
+const track = "https://soundcloud.com/user-813074444/cooking-mama-4-kitchen-magic-ost-menu-extended";
+const embed = `https://w.soundcloud.com/player/?${new URLSearchParams({ url: track, auto_play: "false", color: "#ae3e68", buying: "false", download: "false", sharing: "false", show_artwork: "false" })}`;
+let apiPromise;
+
+function loadWidgetApi() {
+  if (window.SC?.Widget) return Promise.resolve(window.SC);
+  if (!apiPromise) apiPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://w.soundcloud.com/player/api.js";
+    script.onload = () => window.SC?.Widget ? resolve(window.SC) : reject(new Error("Widget unavailable"));
+    script.onerror = () => { script.remove(); reject(new Error("SoundCloud unavailable")); };
+    document.head.append(script);
+  }).catch((error) => { apiPromise = null; throw error; });
+  return apiPromise;
+}
 
 export default function MusicToggle() {
   const [state, setState] = useState("off");
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
+  const iframe = useRef(null);
   const player = useRef(null);
-  const request = useRef(0);
-  const mounted = useRef(false);
+  const ready = useRef(false);
+  const wanted = useRef(false);
+  const timer = useRef(null);
 
   function stop() {
-    request.current += 1;
-    const audio = player.current;
-    if (audio?.source) {
-      const source = audio.source;
-      audio.source = null;
-      audio.gain.gain.cancelScheduledValues(audio.context.currentTime);
-      audio.gain.gain.setValueAtTime(audio.gain.gain.value, audio.context.currentTime);
-      audio.gain.gain.linearRampToValueAtTime(0, audio.context.currentTime + .04);
-      source.stop(audio.context.currentTime + .05);
-    }
-    if (mounted.current) setState("off");
+    wanted.current = false;
+    clearTimeout(timer.current);
+    player.current?.pause();
+    setState("off");
   }
 
   useEffect(() => {
-    mounted.current = true;
     const hide = () => { if (document.hidden) stop(); };
     document.addEventListener("visibilitychange", hide);
-    return () => {
-      mounted.current = false;
-      request.current += 1;
-      document.removeEventListener("visibilitychange", hide);
-      player.current?.context.close().catch(() => {});
-      player.current = null;
-    };
+    return () => { document.removeEventListener("visibilitychange", hide); clearTimeout(timer.current); };
   }, []);
 
-  async function toggle() {
-    if (state === "on") { stop(); return; }
-    if (state === "loading") return;
-    const current = ++request.current;
-    setError(""); setState("loading");
-    try {
-      if (!player.current) {
-        const Context = window.AudioContext || window.webkitAudioContext;
-        if (!Context) throw new Error("Audio unavailable");
-        player.current = { context: new Context(), buffer: null, source: null, gain: null };
+  useEffect(() => {
+    if (!loaded) return;
+    let active = true;
+    let widget;
+    const fail = () => {
+      if (!active) return;
+      stop();
+      setLoaded(false);
+      setError("เปิดเพลงไม่ได้ ลองกดเล่นใน SoundCloud นะ");
+    };
+    loadWidgetApi().then((SC) => {
+      if (!active) return;
+      widget = SC.Widget(iframe.current);
+      player.current = widget;
+      widget.bind(SC.Widget.Events.READY, () => {
+        if (!active) return;
+        ready.current = true;
+        widget.setVolume(40);
+        if (wanted.current && !document.hidden) widget.play();
+      });
+      widget.bind(SC.Widget.Events.PLAY, () => {
+        if (!active) return;
+        if (!wanted.current || document.hidden) { widget.pause(); return; }
+        clearTimeout(timer.current);
+        setError("");
+        setState("on");
+      });
+      widget.bind(SC.Widget.Events.PAUSE, () => {
+        if (!active) return;
+        wanted.current = false;
+        clearTimeout(timer.current);
+        setState("off");
+      });
+      widget.bind(SC.Widget.Events.FINISH, () => {
+        if (active && wanted.current && !document.hidden) { widget.seekTo(0); widget.play(); }
+      });
+      widget.bind(SC.Widget.Events.ERROR, fail);
+    }).catch(fail);
+    return () => {
+      active = false;
+      ready.current = false;
+      if (widget) {
+        widget.pause();
+        for (const event of Object.values(window.SC.Widget.Events)) widget.unbind(event);
       }
-      const audio = player.current;
-      await audio.context.resume();
-      if (!audio.buffer) audio.buffer = await createKitchenMusic();
-      if (!mounted.current || current !== request.current || document.hidden) {
-        if (!audio.source && audio.context.state !== "closed") await audio.context.suspend();
-        return;
-      }
-      const source = audio.context.createBufferSource();
-      const gain = audio.context.createGain();
-      source.buffer = audio.buffer; source.loop = true;
-      gain.gain.setValueAtTime(0, audio.context.currentTime);
-      gain.gain.linearRampToValueAtTime(.55, audio.context.currentTime + .1);
-      source.connect(gain); gain.connect(audio.context.destination);
-      source.onended = () => {
-        source.disconnect(); gain.disconnect();
-        if (!audio.source && audio.context.state !== "closed") audio.context.suspend().catch(() => {});
-      };
-      audio.source = source; audio.gain = gain;
-      source.start(); setState("on");
-    } catch {
-      const audio = player.current;
-      if (audio && !audio.source && audio.context.state === "running") audio.context.suspend().catch(() => {});
-      if (mounted.current && current === request.current) { setState("off"); setError("เปิดเพลงไม่ได้ ลองอีกครั้งนะ"); }
-    }
+      player.current = null;
+    };
+  }, [loaded]);
+
+  function toggle() {
+    if (state !== "off") { stop(); return; }
+    wanted.current = true;
+    setError("");
+    setState("loading");
+    setLoaded(true);
+    if (ready.current) player.current.play();
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      stop();
+      setLoaded(false);
+      setError("เพลงยังไม่พร้อม ลองอีกครั้งหรือเปิดใน SoundCloud นะ");
+    }, 20000);
   }
 
-  const label = state === "on" ? "ปิดเพลง" : "เปิดเพลง";
+  const label = state === "off" ? "เปิดเพลง" : "ปิดเพลง";
   return <div className="music-control">
-    <button className={`icon-button music-toggle ${state === "on" ? "is-playing" : ""}`} type="button" aria-label={label} title={label} aria-pressed={state === "on"} disabled={state === "loading"} onClick={toggle}>
+    <button className={`icon-button music-toggle ${state === "on" ? "is-playing" : ""}`} type="button" aria-label={label} title={label} aria-pressed={state !== "off"} onClick={toggle}>
       {state === "loading" ? <LoaderCircle size={18} className="spin" /> : state === "on" ? <Volume2 size={18} /> : <VolumeX size={18} />}
     </button>
-    {error && <span className="music-error" role="alert">{error}</span>}
+    {loaded && <iframe ref={iframe} className="soundcloud-player" title="Cooking Mama 4 soundtrack on SoundCloud" src={embed} allow="autoplay" hidden={state === "off"} />}
+    {error && <span className="music-error" role="alert">{error} <a href={track} target="_blank" rel="noreferrer">SoundCloud</a></span>}
   </div>;
 }

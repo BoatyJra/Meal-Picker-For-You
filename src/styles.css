@@ -18,6 +18,8 @@ body { margin: 0; min-width: 280px; }
 .header-controls .icon-button:hover { background: #ffeaf1; }
 .header-controls .music-toggle.is-playing { background: #f4d4e2; color: #833c5b; border-color: #d896b1; }
 .music-control { position: relative; }
+.soundcloud-player { position: fixed; right: 16px; bottom: 16px; width: min(300px, calc(100vw - 32px)); height: 166px; border: 1px solid #e8bdce; border-radius: 8px; background: #fff8fb; box-shadow: 0 4px 20px #90345226; z-index: 10; }
+.soundcloud-player[hidden] { display: none; }
 .music-error { position: absolute; top: 50px; right: 0; width: 190px; padding: 10px; border: 1px solid #e8bdce; background: #fff8fb; color: #963653; font-size: 12px; z-index: 3; border-radius: 6px; }
 button, input, textarea, select { font: inherit; }
 button, a, input, textarea { -webkit-tap-highlight-color: transparent; }
