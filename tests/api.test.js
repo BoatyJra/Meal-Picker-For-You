@@ -7,9 +7,9 @@ import os from "node:os";
 import path from "node:path";
 import net from "node:net";
 
-for (const entry of ["server/index.js", "tests/serve-functions.js"]) {
+for (const entry of ["server/index.js", "server/dev.js", "tests/serve-functions.js"]) {
 for (const ownerPassword of ["test-owner-password", "รหัสผ่านของเรา💖"]) {
-test(`${entry} (${ownerPassword === "test-owner-password" ? "ASCII" : "Unicode"} password): authentication, validation, duplicate detection, and restart persistence`, async () => {
+test(`${entry} (${ownerPassword === "test-owner-password" ? "ASCII" : "Unicode"} password): all-category CRUD, authentication, validation, and restart persistence`, async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "meal-picker-api-"));
   const port = await new Promise((resolve) => {
     const socket = net.createServer();
@@ -20,7 +20,7 @@ test(`${entry} (${ownerPassword === "test-owner-password" ? "ASCII" : "Unicode"}
   let errors = "";
   async function start() {
     server = spawn(process.execPath, [entry], {
-      env: { ...process.env, PORT: String(port), DATA_DIR: directory, RECIPE_PASSWORD: ownerPassword, TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "", VERCEL: "" },
+      env: { ...process.env, PORT: String(port), DATA_DIR: directory, DEV_DATA_DIR: directory, DEV_RECIPE_PASSWORD: ownerPassword, RECIPE_PASSWORD: ownerPassword, TURSO_DATABASE_URL: entry === "server/dev.js" ? "libsql://must-not-connect.example" : "", TURSO_AUTH_TOKEN: "", VERCEL: "" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     server.stderr.on("data", (chunk) => { errors += chunk.toString(); });
@@ -62,6 +62,37 @@ test(`${entry} (${ownerPassword === "test-owner-password" ? "ASCII" : "Unicode"}
     assert.deepEqual(reloaded.find((item) => item.id === saved.id).ingredients, recipe.ingredients);
     assert.equal(reloaded.find((item) => item.id === saved.id).video, recipe.video);
     assert.equal(Object.hasOwn(reloaded.find((item) => item.id === saved.id), "password"), false);
+    const request = (method, body, password = ownerPassword) => fetch(`${url}/api/menus`, {
+      method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, password }),
+    });
+    const all = await (await fetch(`${url}/api/menus`)).json();
+    assert.equal(all.length, 69);
+    const removedSeeds = [];
+    for (const mode of ["food", "snacks", "home"]) {
+      const menu = { ...recipe, name: "Shared name across modes", mode, category: "Test tag" };
+      assert.equal((await request("POST", menu, "wrong")).status, 401);
+      const created = await request("POST", menu);
+      assert.equal(created.status, 201);
+      const added = await created.json();
+      assert.equal((await request("POST", menu)).status, 409);
+      const edited = await request("PUT", { ...added, name: "Edited menu", category: "New tag" });
+      assert.equal(edited.status, 200);
+      assert.equal((await edited.json()).category, "New tag");
+      assert.equal((await request("DELETE", { id: added.id }, "wrong")).status, 401);
+      assert.equal((await request("DELETE", { id: added.id })).status, 200);
+      const seed = all.find((item) => item.mode === mode);
+      assert.equal((await request("DELETE", { id: seed.id })).status, 200);
+      removedSeeds.push(seed.id);
+    }
+    assert.equal((await request("PUT", { ...recipe, mode: "food", category: "Test", id: -1 })).status, 400);
+    assert.equal((await request("DELETE", { id: 999999 })).status, 404);
+    assert.equal((await request("POST", { ...recipe, mode: "unknown", category: "Test" })).status, 400);
+    assert.equal((await request("PUT", { ...recipe, mode: "food", category: "Test", id: 999999 })).status, 404);
+    await stop();
+    await start();
+    const persisted = await (await fetch(`${url}/api/menus`)).json();
+    assert.equal(persisted.length, 66);
+    assert.ok(removedSeeds.every((id) => !persisted.some((item) => item.id === id)));
   } finally {
     await stop();
     await rm(directory, { recursive: true, force: true });
@@ -69,6 +100,32 @@ test(`${entry} (${ownerPassword === "test-owner-password" ? "ASCII" : "Unicode"}
 });
 }
 }
+
+test("Existing recipes are migrated without modifying the original table", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "meal-picker-migrate-"));
+  try {
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e", `
+      import { createClient } from "@libsql/client";
+      import { pathToFileURL } from "node:url";
+      import path from "node:path";
+      const source = createClient({ url: pathToFileURL(path.join(process.env.DATA_DIR, "recipes.sqlite")).href });
+      const old = { name: "Existing family recipe", category: "Custom", video: "", ingredients: ["Chicken 300 g"], steps: ["Cook thoroughly"] };
+      await source.execute("CREATE TABLE recipes (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE UNIQUE, body TEXT NOT NULL)");
+      await source.execute({ sql: "INSERT INTO recipes (name, body) VALUES (?, ?)", args: [old.name, JSON.stringify(old)] });
+      const { listMenus, getClient } = await import("./server/database.js");
+      const menus = await listMenus();
+      const legacy = await source.execute("SELECT body FROM recipes");
+      console.log(JSON.stringify({ count: menus.length, migrated: menus.find(menu => menu.name === old.name), original: JSON.parse(legacy.rows[0].body) }));
+      source.close(); getClient().close();
+    `], { env: { ...process.env, DATA_DIR: directory, TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "", VERCEL: "" }, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.count, 61);
+    assert.equal(data.migrated.mode, "home");
+    assert.deepEqual(data.migrated.ingredients, data.original.ingredients);
+    assert.equal(data.original.name, "Existing family recipe");
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
 
 test("Vercel refuses temporary local storage when Turso credentials are missing", () => {
   const result = spawnSync(process.execPath, ["--input-type=module", "-e",

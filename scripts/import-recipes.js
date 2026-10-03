@@ -17,7 +17,8 @@ if (filename.endsWith(".json")) {
 } else {
   const source = createClient({ url: pathToFileURL(filename).href });
   try {
-    const result = await source.execute("SELECT body FROM recipes ORDER BY id");
+    const tables = await source.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'menus'");
+    const result = await source.execute(tables.rows.length ? "SELECT body FROM menus WHERE mode = 'home' ORDER BY id" : "SELECT body FROM recipes ORDER BY id");
     recipes = result.rows.map((row) => JSON.parse(row.body));
   } finally { source.close(); }
 }
@@ -28,8 +29,8 @@ await initializeDatabase();
 const destination = getClient();
 try {
   const results = recipes.length ? await destination.batch(recipes.map((recipe) => ({
-    sql: "INSERT OR IGNORE INTO recipes (name, body) VALUES (?, ?)",
-    args: [recipe.name.trim(), JSON.stringify({
+    sql: "INSERT OR IGNORE INTO menus (mode, name, body) VALUES ('home', ?, ?)",
+    args: [recipe.name.trim(), JSON.stringify({ mode: "home",
       name: recipe.name.trim(), category: recipe.category === "ทำกินเอง" ? "ทำกินเอง" : "สูตรของเรา",
       ingredients: recipe.ingredients, steps: recipe.steps, video: recipe.video,
     })],

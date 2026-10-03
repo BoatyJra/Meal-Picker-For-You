@@ -1,7 +1,23 @@
 # Meal Picker For You
 
 Thai recipe picker built with React, Vite, Tailwind, Express, and Turso/libSQL.
-The frontend and API deploy together on Vercel; Turso stores shared recipes.
+The frontend and API deploy together on Vercel; Turso stores menus in all categories.
+
+## Dev Branch
+
+New interface and menu-management changes are on `dev`. Keep Vercel's Production
+Branch set to `master` until local testing is complete. Automatic deployments
+from `dev` are disabled in `vercel.json` using Vercel's
+[branch deployment setting](https://vercel.com/docs/project-configuration/git-configuration#gitdeploymentenabled).
+Use a separate Preview
+database or leave Preview deployments disconnected from the production database.
+Do not reuse production Turso credentials while testing deletion.
+
+All three categories support adding, editing, deleting, searching, and tag-based
+randomization. Writes require `RECIPE_PASSWORD`; it is sent in JSON so Thai
+passwords work. Passwords are not stored with menus or in browser storage.
+The first startup migrates existing home recipes into the shared menu library
+and seeds food/snacks once. Deleted starter menus are not restored on restart.
 
 ## Local Development
 
@@ -9,9 +25,12 @@ Use Node.js 22 or newer. Run `npm install`, copy `.env.example` to `.env`,
 set `RECIPE_PASSWORD`, and run `npm run dev`.
 
 Open http://127.0.0.1:5173. The API runs on port 3001 via Vite's proxy.
-When the Turso variables are blank, recipes use `data/recipes.sqlite`.
+`npm run dev` always uses the isolated `data/dev/recipes.sqlite` database and
+ignores Turso credentials. Its default owner password is `local-preview-only`;
+change it with `DEV_RECIPE_PASSWORD`. `DEV_DATA_DIR` can change the test directory.
+`npm start` uses `data/recipes.sqlite` when Turso variables are blank.
 The existing SQLite file remains compatible and is not deleted or reset.
-Set both Turso variables locally to test against your hosted database instead.
+To explicitly test a hosted database, use `npm start` with both Turso variables.
 
 ## Deploy on Vercel and Turso
 
@@ -35,7 +54,8 @@ variables are configured separately: use a separate test database for previews
 if you do not want preview writes to change production recipes.
 
 4. Deploy. `/api/health` confirms the database connection and initialization.
-   Eight starter recipes are inserted if their names do not already exist.
+   Eight starter recipes and 60 food/snack menus are seeded once on a new database.
+   Existing home recipes are migrated without deleting the original table.
 5. Open the home-cooking category and add a recipe using your owner password.
    Open the site on another device to confirm the saved recipe is shared.
 
@@ -71,7 +91,7 @@ and the source file is preserved. Back up your recipes before changing hosting.
 Home recipe quantities serve two; they are usage amounts, not Makro package sizes.
 Common ingredients are used, but store availability and prices are not verified.
 TikTok links open the original video; ingredients and steps are entered manually.
-Public users can browse. Adding a recipe requires the owner password, which is
+Public users can browse. Adding, editing, or deleting a menu requires the owner password, which is
 not stored in the browser. Previously saved browser recipes can be downloaded
 from the home-cooking view and imported using the command above.
 
