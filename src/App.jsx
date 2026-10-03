@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Heart, Utensils, CakeSlice, CookingPot, Shuffle, Copy, Check, ChevronDown, ChevronUp,
+import { Heart, Utensils, CakeSlice, CookingPot, Shuffle, Copy, Check, ChevronDown,
   Plus, ArrowUpRight, Users, ShoppingBasket, List, Search, X, LoaderCircle, LockKeyhole, Download, Pencil, Trash2, Save, SlidersHorizontal } from "lucide-react";
 import { foodMenus, snackMenus, homeMenus } from "./menus.js";
 import { validateRecipe, validateMenu, recipeText } from "./recipe-schema.js";
-import { menuArt } from "./menu-art.js";
+import { menuArt, categoryArt, randomCategoryArt } from "./menu-art.js";
 
 const modes = [
   { id: "food", label: "สั่งอาหาร", icon: Utensils, note: "มื้ออร่อย ส่งถึงเธอ", empty: "มื้อนี้ให้เราเลือกนะ" },
@@ -100,6 +100,8 @@ export default function App() {
   const [selected, setSelected] = useState(null);
   const [message, setMessage] = useState("");
   const [revision, setRevision] = useState(0);
+  const [artwork, setArtwork] = useState("rice");
+  const [rolling, setRolling] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [editor, setEditor] = useState(null);
@@ -110,6 +112,8 @@ export default function App() {
   const [legacyRecipes, setLegacyRecipes] = useState([]);
   const generation = useRef(0);
   const loadGeneration = useRef(0);
+  const rollTimer = useRef(null);
+  const libraryList = useRef(null);
   const active = modes.find((item) => item.id === mode);
   const home = mode === "home";
   const menus = (loadState === "error" ? fallbackMenus : recipes).filter((menu) => menu.mode === mode);
@@ -133,19 +137,48 @@ export default function App() {
       if (Array.isArray(old)) setLegacyRecipes(old.filter((recipe) => !validateRecipe(recipe)));
     } catch { /* Existing browser data stays untouched. */ }
   }, []);
+  useEffect(() => () => clearTimeout(rollTimer.current), []);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      categoryArt[mode].forEach((art) => { const image = new Image(); image.src = `/menu-${art}.webp`; });
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [mode]);
+  useEffect(() => {
+    const list = libraryList.current;
+    const row = list?.querySelector(".is-selected");
+    if (listOpen && row) {
+      list.scrollTo({ top: row.offsetTop - (list.clientHeight - row.offsetHeight) / 2,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    }
+  }, [listOpen, selected?.id]);
+  useEffect(() => { if (libraryList.current) libraryList.current.scrollTop = 0; }, [mode, query, tag]);
 
   function changeMode(value) {
+    clearTimeout(rollTimer.current); setRolling(false);
     generation.current += 1;
+    setArtwork(randomCategoryArt(value));
+    setRevision((value) => value + 1);
     setMode(value); setSelected(null); setCopyState(""); setMessage(""); setQuery(""); setTag(""); setNotice("");
   }
   function choose(menu) {
+    clearTimeout(rollTimer.current); setRolling(false);
     generation.current += 1;
+    setArtwork((last) => randomCategoryArt(menu.mode || mode, last));
     setSelected(menu); setMessage(pick(messages)); setRevision((value) => value + 1); setCopyState("");
   }
+  function changeTag(value) {
+    clearTimeout(rollTimer.current); setRolling(false); generation.current += 1;
+    setTag(value); setSelected(null); setMessage(""); setCopyState("");
+  }
   function randomize() {
+    if (rolling) return;
     const choices = pool.filter((menu) => menu.id ? menu.id !== selected?.id : menu.name !== selected?.name);
-    if (choices.length) choose(pick(choices));
-    else if (pool.length) choose(pool[0]);
+    const next = choices.length ? pick(choices) : pool[0];
+    if (!next) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { choose(next); return; }
+    setRolling(true);
+    rollTimer.current = setTimeout(() => choose(next), 260);
   }
   async function copy() {
     const current = generation.current;
@@ -179,23 +212,33 @@ export default function App() {
       <div className="intro"><p className="eyebrow"><Heart size={12} fill="currentColor" /> A LITTLE LESS THINKING, A LITTLE MORE US</p><h1>วันนี้กินอะไรดี?</h1><p className="muted">มาสุ่มกันนนน</p></div>
       <div className="mode-tabs" role="group" aria-label="เลือกหมวดเมนู">{modes.map(({ id, label, icon: Icon }) => <button type="button" key={id} aria-pressed={mode === id} onClick={() => changeMode(id)}><Icon size={18} /><span>{label}</span></button>)}</div>
       <div className="mode-meta"><span>{active.note}</span><span>{menus.length} เมนู{home && " · 2 คน"}</span></div>
-      <div className="filter-bar"><SlidersHorizontal size={16} /><select aria-label="เลือกแท็กสำหรับสุ่ม" value={tag} onChange={(event) => { generation.current += 1; setTag(event.target.value); setSelected(null); setMessage(""); setCopyState(""); }}><option value="">ทุกแท็ก</option>{tags.map((value) => <option key={value} value={value}>{value}</option>)}</select>{tag && <span>{pool.length} เมนู</span>}</div>
-      <section className={`picker-result ${home ? "home-result" : mode === "snacks" ? "snack-result" : ""}`} aria-live="polite">
+      <div className="filter-bar"><SlidersHorizontal size={16} /><select aria-label="เลือกแท็กสำหรับสุ่ม" value={tag} onChange={(event) => changeTag(event.target.value)}><option value="">ทุกแท็ก</option>{tags.map((value) => <option key={value} value={value}>{value}</option>)}</select>{tag && <span>{pool.length} เมนู</span>}</div>
+      <section className={`picker-result ${home ? "home-result" : mode === "snacks" ? "snack-result" : ""} ${rolling ? "is-rolling" : ""}`} aria-live="polite" aria-busy={rolling}>
         <div key={revision} className="result-content">
           <div className="result-topline"><span className="result-kicker">{selected ? "เมนูนี้… เลือกให้เธอ" : home ? "เข้าครัวด้วยกัน" : mode === "snacks" ? "เวลาของความหวาน" : "มื้ออร่อยของเรา"}</span><Heart size={18} fill="currentColor" aria-hidden="true" /></div>
-          <div className="result-art" aria-hidden="true"><img src={`/menu-${menuArt(selected, mode)}.webp`} alt="" width="180" height="150" /></div>
+          <div className="result-art" aria-hidden="true"><img src={`/menu-${artwork}.webp`} alt="" width="180" height="150" /></div>
           <span className="tag">{selected?.category || (home ? "สำหรับเราสองคน" : mode === "snacks" ? "a little sweet treat" : "a little comfort food")}</span>
           <h2>{selected?.name || (loadState === "ready" && !pool.length ? "เพิ่มเมนูแรกของเรากัน" : active.empty)}</h2>
           <p className="result-message">{message || "วันนี้ไม่ต้องคิดเยอะ เดี๋ยวเลือกให้เอง"}</p>
           {home && <span className="result-servings"><Users size={14} /> สำหรับเราสองคน</span>}
         </div>
       </section>
-      <div className="result-actions"><button className="button-primary" type="button" disabled={!pool.length || loadState === "loading"} onClick={randomize}>{loadState === "loading" ? <LoaderCircle className="spin" size={20} /> : <Shuffle size={20} />} สุ่มเมนูให้เธอ</button><button className="icon-button copy-button" type="button" title={home ? "คัดลอกสูตรและวัตถุดิบ" : "คัดลอกเมนู"} aria-label={home ? "คัดลอกสูตรและวัตถุดิบ" : "คัดลอกเมนู"} disabled={!selected} onClick={copy}>{copyState === "คัดลอกแล้ว" ? <Check size={20} /> : <Copy size={20} />}</button></div>
+      <div className="result-actions"><button className={`button-primary ${rolling ? "shuffle-active" : ""}`} type="button" disabled={!pool.length || loadState === "loading" || rolling} onClick={randomize}>{loadState === "loading" ? <LoaderCircle className="spin" size={20} /> : <Shuffle size={20} />} สุ่มเมนูให้เธอ</button><button className="icon-button copy-button" type="button" title={home ? "คัดลอกสูตรและวัตถุดิบ" : "คัดลอกเมนู"} aria-label={home ? "คัดลอกสูตรและวัตถุดิบ" : "คัดลอกเมนู"} disabled={!selected || rolling} onClick={copy}>{copyState === "คัดลอกแล้ว" ? <Check size={20} /> : <Copy size={20} />}</button></div>
       <p className="feedback" role="status">{copyState || notice}</p>
       {loadState === "error" && <div className="error-message" role="alert">เชื่อมต่อลิสต์ที่บันทึกไว้ไม่ได้ กำลังแสดงเมนูเริ่มต้น <button type="button" onClick={loadRecipes}>ลองอีกครั้ง</button></div>}
+      <div className="library-bar"><button className="library-toggle" type="button" aria-expanded={listOpen} aria-controls="menu-library" onClick={() => setListOpen((value) => !value)}><List size={18} /> {listOpen ? "ซ่อนลิสต์เมนู" : "ดูลิสต์เมนู"}<span className="library-count">{menus.length}</span><ChevronDown size={17} className={listOpen ? "chevron-open" : ""} /></button><button className="add-recipe" type="button" disabled={loadState !== "ready"} onClick={() => setEditor({ operation: "add", menu: { mode, category: home ? "ทำกินเอง" : mode === "snacks" ? "ของหวาน" : "comfort" } })}><Plus size={17} /> เพิ่มเมนู</button></div>
+      <section id="menu-library" className={`library-reveal ${listOpen ? "is-open" : ""}`} aria-label="รายการเมนู" aria-hidden={!listOpen} inert={!listOpen}>
+        <div className="library-clip"><div className="menu-library">
+          <div className="library-heading"><h2>เมนูของเรา</h2><span>{filtered.length} / {menus.length} เมนู</span></div>
+          <label className="search-field"><Search size={18} /><input type="search" aria-label="ค้นหาเมนู" placeholder="ค้นหาเมนูที่ชอบ…" value={query} onChange={(event) => setQuery(event.target.value)} />{query && <button className="clear-search" type="button" aria-label="ล้างคำค้นหา" title="ล้างคำค้นหา" onClick={() => setQuery("")}><X size={16} /></button>}</label>
+          <ul ref={libraryList}>{filtered.map((menu, index) => <li className={selected?.id === menu.id && menu.id ? "is-selected" : ""} style={{ "--row-delay": `${Math.min(index, 7) * 22}ms` }} key={menu.id || menu.name}>
+            <button className="menu-name" type="button" aria-pressed={selected?.id === menu.id && Boolean(menu.id)} onClick={() => choose(menu)}><img className="menu-thumb" src={`/menu-${menuArt(menu, mode)}.webp`} alt="" width="48" height="48" loading="lazy" /><div><strong>{menu.name}</strong><span>{menu.category}{home ? " · 2 คน" : ""}</span></div>{selected?.id === menu.id && menu.id && <Check className="selected-mark" size={16} />}</button>
+            <div className="row-actions"><button className="icon-button" type="button" title="แก้ไขเมนู" aria-label={`แก้ไข ${menu.name}`} disabled={!menu.id} onClick={() => setEditor({ operation: "edit", menu })}><Pencil size={16} /></button><button className="icon-button delete-icon" type="button" title="ลบเมนู" aria-label={`ลบ ${menu.name}`} disabled={!menu.id} onClick={() => setEditor({ operation: "delete", menu })}><Trash2 size={16} /></button></div>
+          </li>)}</ul>
+          {!filtered.length && <div className="library-empty"><Search size={24} /><p>{loadState === "loading" ? "กำลังโหลดเมนู…" : "ไม่พบเมนูที่ค้นหา"}</p>{loadState !== "loading" && (query || tag) && <button type="button" onClick={() => { setQuery(""); changeTag(""); }}>ล้างตัวกรอง</button>}</div>}
+        </div></div>
+      </section>
       {home && selected && <RecipeDetails key={`${selected.name}-${revision}`} recipe={selected} />}
-      <div className="library-bar"><button className="library-toggle" type="button" aria-expanded={listOpen} aria-controls="menu-library" onClick={() => setListOpen((value) => !value)}><List size={18} /> {listOpen ? "ซ่อนลิสต์เมนู" : "ดูลิสต์เมนู"} {listOpen ? <ChevronUp size={17} /> : <ChevronDown size={17} />}</button><button className="add-recipe" type="button" disabled={loadState !== "ready"} onClick={() => setEditor({ operation: "add", menu: { mode, category: home ? "ทำกินเอง" : mode === "snacks" ? "ของหวาน" : "comfort" } })}><Plus size={17} /> เพิ่มเมนู</button></div>
-      {listOpen && <section id="menu-library" className="menu-library" aria-label="รายการเมนู"><label className="search-field"><Search size={18} /><input type="search" aria-label="ค้นหาเมนู" placeholder="ค้นหาเมนูที่ชอบ…" value={query} onChange={(event) => setQuery(event.target.value)} /></label><ul>{filtered.map((menu) => <li key={menu.id || menu.name}><button className="menu-name" type="button" onClick={() => choose(menu)}><strong>{menu.name}</strong><span>{menu.category}{home ? " · 2 คน" : ""}</span></button><div className="row-actions"><button className="icon-button" type="button" title="แก้ไขเมนู" aria-label={`แก้ไข ${menu.name}`} disabled={!menu.id} onClick={() => setEditor({ operation: "edit", menu })}><Pencil size={16} /></button><button className="icon-button delete-icon" type="button" title="ลบเมนู" aria-label={`ลบ ${menu.name}`} disabled={!menu.id} onClick={() => setEditor({ operation: "delete", menu })}><Trash2 size={16} /></button></div></li>)}</ul>{!filtered.length && <p className="muted text-center py-6">{loadState === "loading" ? "กำลังโหลดเมนู…" : "ไม่พบเมนูที่ค้นหา"}</p>}</section>}
       {home && legacyRecipes.length > 0 && <div className="legacy-notice"><p>พบ {legacyRecipes.length} สูตรที่เคยเก็บในเบราว์เซอร์นี้</p><button type="button" onClick={exportLegacy}><Download size={16} /> ดาวน์โหลดสูตรเดิม</button></div>}
       <footer className="app-footer"><Heart size={14} /> {home ? "มื้อธรรมดา ที่พิเศษเพราะกินด้วยกัน" : "กินให้อร่อยนะคนเก่ง"}</footer>
     </main>

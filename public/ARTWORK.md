@@ -1,10 +1,18 @@
 # Menu Artwork
 
 Generated with the built-in image generation tool, then exported as small WebP
-assets with transparency preserved. These illustrations represent menu types,
-not exact photographs of every dish. Custom menus use the same type-based mapping.
+assets with transparency preserved. The result rotates freely through five
+illustrations per category without immediate repeats. These are category artwork,
+not exact photographs of every dish. List thumbnails use menu-type mapping.
 
 Files: `menu-rice.webp`, `menu-noodles.webp`, `menu-sweet.webp`, `menu-drink.webp`.
+Additional files: `menu-salad.webp`, `menu-fried.webp`, `menu-curry.webp`,
+`menu-pastry.webp`, `menu-icecream.webp`, `menu-pancakes.webp`, `menu-cooking.webp`.
+
+Category pools:
+- Food: rice, noodles, salad, fried chicken, curry.
+- Snacks: cake/toast, iced tea, pastry, ice cream, pancakes.
+- Home: rice, noodles, salad, curry, cooking pot.
 
 Prompt template:
 
@@ -28,3 +36,18 @@ Subjects:
   slice and a mint-green straw, a small lemon wedge beside it. Drink prompt used
   "one centered drink arrangement" and "muted rose and sage accents" instead of
   their food-template equivalents.
+- Salad: a pale pink ceramic bowl of fresh green salad with grilled chicken
+  strips, cherry tomatoes and cucumber, clearly recognizable.
+- Fried: a mint-green plate of three golden crispy fried chicken pieces with a
+  few potato wedges and a small pink ramekin of sauce.
+- Curry: a mint-green ceramic bowl containing Japanese chicken curry with golden
+  sauce, carrot and potato chunks, white rice on one side.
+- Pastry: a pale pink ceramic plate with a golden butter croissant and a small
+  chocolate-chip cookie.
+- Ice cream: a mint-green dessert bowl holding two scoops of strawberry and
+  vanilla ice cream, a little wafer and two strawberry slices.
+- Pancakes: a pale pink ceramic plate with three fluffy golden pancakes,
+  strawberries, a little butter and a drizzle of syrup.
+- Cooking: a small mint-green cooking pot filled with homemade chicken and
+  vegetable stew, a wooden spoon resting beside it and two tiny pale pink
+  serving bowls.

@@ -16,9 +16,12 @@ Do not reuse production Turso credentials while testing deletion.
 All three categories support adding, editing, deleting, searching, and tag-based
 randomization. Writes require `RECIPE_PASSWORD`; it is sent in JSON so Thai
 passwords work. Passwords are not stored with menus or in browser storage.
-The interface uses self-hosted Kanit fonts and small transparent food illustrations
-for rice, noodles, sweets, and drinks. Artwork generation notes are in
-`public/ARTWORK.md`; menu types determine the illustration, not exact dish photos.
+The interface uses self-hosted Kanit fonts and small transparent food illustrations.
+Each category rotates through five artwork choices, avoiding immediate repeats.
+List thumbnails follow menu types; the result's artwork is decorative category art,
+not an exact dish photo. Artwork generation notes are in `public/ARTWORK.md`.
+The searchable menu list expands/collapses smoothly and marks the selected menu.
+Reduced-motion preferences disable list/result animations and the shuffle delay.
 The first startup migrates existing home recipes into the shared menu library
 and seeds food/snacks once. Deleted starter menus are not restored on restart.
 
