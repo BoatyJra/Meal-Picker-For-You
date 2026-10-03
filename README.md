@@ -22,6 +22,11 @@ List thumbnails follow menu types; the result's artwork is decorative category a
 not an exact dish photo. Artwork generation notes are in `public/ARTWORK.md`.
 The searchable menu list expands/collapses smoothly and marks the selected menu.
 Reduced-motion preferences disable list/result animations and the shuffle delay.
+The pink-and-white tartan backdrop drifts slowly and has a pause control. Music is
+off on page load and starts only from its header toggle. It uses an original
+eight-bar cooking-game-style tune synthesized locally with Web Audio, not the
+Cooking Mama soundtrack. It stops when the tab is hidden and never needs an
+external audio download. No audio is autoplayed or fetched from third parties.
 The first startup migrates existing home recipes into the shared menu library
 and seeds food/snacks once. Deleted starter menus are not restored on restart.
 

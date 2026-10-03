@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Heart, Utensils, CakeSlice, CookingPot, Shuffle, Copy, Check, ChevronDown,
-  Plus, ArrowUpRight, Users, ShoppingBasket, List, Search, X, LoaderCircle, LockKeyhole, Download, Pencil, Trash2, Save, SlidersHorizontal } from "lucide-react";
+  Plus, ArrowUpRight, Users, ShoppingBasket, List, Search, X, LoaderCircle, LockKeyhole, Download, Pencil, Trash2, Save, SlidersHorizontal, Pause, Play } from "lucide-react";
 import { foodMenus, snackMenus, homeMenus } from "./menus.js";
 import { validateRecipe, validateMenu, recipeText } from "./recipe-schema.js";
 import { menuArt, categoryArt, randomCategoryArt } from "./menu-art.js";
+import MusicToggle from "./MusicToggle.jsx";
 
 const modes = [
   { id: "food", label: "สั่งอาหาร", icon: Utensils, note: "มื้ออร่อย ส่งถึงเธอ", empty: "มื้อนี้ให้เราเลือกนะ" },
@@ -95,6 +96,8 @@ function MenuForm({ initial, operation, onSave, onClose, busy }) {
 
 export default function App() {
   const [mode, setMode] = useState("food");
+  const [backgroundMoving, setBackgroundMoving] = useState(() => !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const [recipes, setRecipes] = useState([]);
   const [loadState, setLoadState] = useState("loading");
   const [selected, setSelected] = useState(null);
@@ -138,6 +141,12 @@ export default function App() {
     } catch { /* Existing browser data stays untouched. */ }
   }, []);
   useEffect(() => () => clearTimeout(rollTimer.current), []);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const change = (event) => { setReducedMotion(event.matches); if (event.matches) setBackgroundMoving(false); };
+    media.addEventListener("change", change);
+    return () => media.removeEventListener("change", change);
+  }, []);
   useEffect(() => {
     const timer = setTimeout(() => {
       categoryArt[mode].forEach((art) => { const image = new Image(); image.src = `/menu-${art}.webp`; });
@@ -207,7 +216,8 @@ export default function App() {
   }
 
   return <div className="app-shell">
-    <header className="site-header"><a className="brand" href="#"><Heart size={20} fill="currentColor" /> Meal Picker <span className="brand-sub">for you</span></a><span className="small-label"><Heart size={13} /> made with love</span></header>
+    <div className={`tartan-backdrop ${backgroundMoving ? "" : "is-paused"}`} aria-hidden="true" />
+    <header className="site-header"><a className="brand" href="#"><Heart size={20} fill="currentColor" /> Meal Picker <span className="brand-sub">for you</span></a><div className="header-controls"><button className="icon-button motion-toggle" type="button" aria-pressed={backgroundMoving} aria-label={backgroundMoving ? "หยุดพื้นหลัง" : "ขยับพื้นหลัง"} title={reducedMotion ? "พื้นหลังนิ่งตามการตั้งค่าลดการเคลื่อนไหว" : backgroundMoving ? "หยุดพื้นหลัง" : "ขยับพื้นหลัง"} disabled={reducedMotion} onClick={() => setBackgroundMoving((value) => !value)}>{backgroundMoving ? <Pause size={16} /> : <Play size={16} />}</button><MusicToggle /></div></header>
     <main className="main-content">
       <div className="intro"><p className="eyebrow"><Heart size={12} fill="currentColor" /> A LITTLE LESS THINKING, A LITTLE MORE US</p><h1>วันนี้กินอะไรดี?</h1><p className="muted">มาสุ่มกันนนน</p></div>
       <div className="mode-tabs" role="group" aria-label="เลือกหมวดเมนู">{modes.map(({ id, label, icon: Icon }) => <button type="button" key={id} aria-pressed={mode === id} onClick={() => changeMode(id)}><Icon size={18} /><span>{label}</span></button>)}</div>
