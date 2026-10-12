@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "concurrently -k \"node --watch server/dev.js\" \"vite --host 127.0.0.1\"",
     "start": "node server/index.js",
-    "test": "node --test tests/api.test.js tests/menu-art.test.js",
+    "test": "node --test tests/api.test.js tests/favorites.test.js tests/menu-art.test.js tests/recipe-generator.test.js",
     "db:import": "node scripts/import-recipes.js",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1"
@@ -19,6 +19,7 @@
     "@libsql/client": "^0.15.0",
     "dotenv": "^16.4.0",
     "express": "^4.21.0",
+    "jose": "^6.2.12",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

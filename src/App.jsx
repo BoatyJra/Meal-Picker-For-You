@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Heart, Utensils, CakeSlice, CookingPot, Shuffle, Copy, Check, ChevronDown,
-  Plus, ArrowUpRight, Users, ShoppingBasket, List, Search, X, LoaderCircle, LockKeyhole, Download, Pencil, Trash2, Save, SlidersHorizontal, Pause, Play } from "lucide-react";
+  Plus, ArrowUpRight, Users, ShoppingBasket, List, Search, X, LoaderCircle, LockKeyhole, Download, Pencil, Trash2, Save, SlidersHorizontal, Sparkles, LogIn, LogOut } from "lucide-react";
 import { foodMenus, snackMenus, homeMenus } from "./menus.js";
-import { validateRecipe, validateMenu, recipeText } from "./recipe-schema.js";
+import { validateRecipe, validateMenu, recipeText, tiktokVideoId } from "./recipe-schema.js";
 import { menuArt, categoryArt, randomCategoryArt } from "./menu-art.js";
 import MusicToggle from "./MusicToggle.jsx";
 
@@ -19,7 +19,11 @@ async function api(url, options = {}) {
   const response = await fetch(url, options);
   let body;
   try { body = await response.json(); } catch { throw new Error("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองอีกครั้งนะ"); }
-  if (!response.ok) throw new Error(body.error || "เซิร์ฟเวอร์มีปัญหา ลองอีกครั้งนะ");
+  if (!response.ok) {
+    const error = new Error(body.error || "เซิร์ฟเวอร์มีปัญหา ลองอีกครั้งนะ");
+    error.status = response.status;
+    throw error;
+  }
   return body;
 }
 
@@ -46,7 +50,10 @@ function RecipeDetails({ recipe }) {
         </li>)}
       </ul>
     </> : <ol className="steps">{recipe.steps.map((step, index) => <li key={index}><span className="step-number">{index + 1}</span><p>{step}</p></li>)}</ol>}
-    {recipe.video && <a className="video-link" href={recipe.video} target="_blank" rel="noopener noreferrer">ดูสูตรต้นฉบับบน TikTok <ArrowUpRight size={18} /></a>}
+    {recipe.video && (tiktokVideoId(recipe.video) ? <div className="tiktok-video">
+      <iframe src={`https://www.tiktok.com/player/v1/${tiktokVideoId(recipe.video)}?description=1&music_info=1&rel=0`} title={`วิดีโอวิธีทำ ${recipe.name} บน TikTok`} loading="lazy" allow="fullscreen; autoplay; encrypted-media; picture-in-picture" />
+      <a className="video-link" href={recipe.video} target="_blank" rel="noopener noreferrer">เปิดวิดีโอนี้ใน TikTok <ArrowUpRight size={18} /></a>
+    </div> : <a className="video-link" href={recipe.video} target="_blank" rel="noopener noreferrer">ค้นหา “{recipe.name} วิธีทำ” ใน TikTok <ArrowUpRight size={18} /></a>)}
   </section>;
 }
 
@@ -55,6 +62,10 @@ function MenuForm({ initial, operation, onSave, onClose, busy }) {
   const editing = operation === "edit";
   const [form, setForm] = useState({ name: initial.name || "", mode: initial.mode, category: initial.category || "comfort", video: initial.video || "", ingredients: (initial.ingredients || []).join("\n"), steps: (initial.steps || []).join("\n"), password: "" });
   const [error, setError] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [sources, setSources] = useState([]);
+  const [chatGPT, setChatGPT] = useState({ loading: true });
+  const [chatGPTBusy, setChatGPTBusy] = useState(false);
   const dialog = useRef(null);
   const nameInput = useRef(null);
   const splitLines = (value) => value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -66,7 +77,42 @@ function MenuForm({ initial, operation, onSave, onClose, busy }) {
     nameInput.current?.focus();
     return () => { document.body.style.overflow = previousOverflow; opener?.focus(); };
   }, []);
-  function field(name, value) { setForm((current) => ({ ...current, [name]: value })); setError(""); }
+  useEffect(() => {
+    let active = true;
+    api("/api/chatgpt/status")
+      .then((status) => { if (active) setChatGPT({ ...status, loading: false }); })
+      .catch(() => { if (active) setChatGPT({ loading: false, available: false }); });
+    return () => { active = false; };
+  }, []);
+  function field(name, value) { setForm((current) => ({ ...current, [name]: value })); if (name === "name") setSources([]); setError(""); }
+  async function connectChatGPT() {
+    setChatGPTBusy(true); setError("");
+    try {
+      const result = await api("/api/chatgpt/connect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: form.password }) });
+      window.location.assign(result.url);
+    } catch (cause) { setError(cause.message); setChatGPTBusy(false); }
+  }
+  async function disconnect() {
+    setChatGPTBusy(true); setError("");
+    try {
+      await api("/api/chatgpt/disconnect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: form.password }) });
+      setChatGPT((current) => ({ ...current, connected: false, email: "", name: "" }));
+    } catch (cause) { setError(cause.message); }
+    finally { setChatGPTBusy(false); }
+  }
+  async function generate() {
+    const name = form.name.trim();
+    if (!name) { setError("กรอกชื่อเมนูก่อนสร้างสูตร"); return; }
+    setGenerating(true); setError(""); setSources([]);
+    try {
+      const result = await api("/api/generate-recipe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, password: form.password }) });
+      if (!result?.recipe || validateMenu(result.recipe)) throw new Error("สูตรที่สร้างมายังไม่สมบูรณ์ ลองใหม่อีกครั้งนะ");
+      setForm((current) => ({ ...current, mode: "home", name: result.recipe.name, category: result.recipe.category,
+        video: result.recipe.video, ingredients: result.recipe.ingredients.join("\n"), steps: result.recipe.steps.join("\n") }));
+      setSources(Array.isArray(result.sources) ? result.sources : []);
+    } catch (cause) { setError(cause.message); }
+    finally { setGenerating(false); }
+  }
   async function submit(event) {
     event.preventDefault();
     if (busy) return;
@@ -87,17 +133,51 @@ function MenuForm({ initial, operation, onSave, onClose, busy }) {
       <label>วิธีทำ<textarea required maxLength={20000} rows={4} value={form.steps} onChange={(event) => field("steps", event.target.value)} placeholder={"หั่นไก่และเตรียมเครื่องปรุง\nผัดไก่จนสุกทั่ว"} /><span className="field-note">หนึ่งขั้นตอน ต่อหนึ่งบรรทัด</span></label>
       </>}
       </>}
-      <label><span className="flex items-center gap-2"><LockKeyhole size={15} /> รหัสผ่านเจ้าของสูตร</span><input type="password" required autoComplete="current-password" value={form.password} onChange={(event) => field("password", event.target.value)} /></label>
+      <label><span className="flex items-center gap-2"><LockKeyhole size={15} /> รหัสผ่านเจ้าของสูตร <span className="muted font-normal">(ครั้งแรกหรือเมื่อครบ 8 ชม.)</span></span><input type="password" autoComplete="current-password" value={form.password} onChange={(event) => field("password", event.target.value)} /></label>
+      {form.mode === "home" && !chatGPT.loading && <div className="chatgpt-connect" aria-live="polite">
+        {chatGPT.connected ? <><div><strong><Check size={16} /> ใช้แพ็กเกจ ChatGPT แล้ว</strong><span>{chatGPT.name || chatGPT.email || "เชื่อมต่อสำเร็จ"}</span></div><button type="button" disabled={chatGPTBusy || busy || generating} onClick={disconnect}>{chatGPTBusy ? <LoaderCircle className="spin" size={16} /> : <LogOut size={16} />} ยกเลิกการเชื่อมต่อ</button></>
+          : chatGPT.available ? <><div><strong>สร้างสูตรด้วยแพ็กเกจ ChatGPT</strong><span>เชื่อมต่อครั้งเดียว แล้วใช้สิทธิ์จากแผนของคุณ</span></div><button type="button" disabled={chatGPTBusy || busy || generating} onClick={connectChatGPT}>{chatGPTBusy ? <LoaderCircle className="spin" size={16} /> : <LogIn size={16} />} Continue with ChatGPT</button></>
+            : chatGPT.hostedApprovalRequired ? <div><strong>ChatGPT Plus บน Vercel ยังรอสิทธิ์ OAuth</strong><span>{chatGPT.apiKeyConfigured ? "ตอนนี้ระบบจะใช้ OpenAI API key แทน" : "ตั้ง OpenAI API key ชั่วคราว หรือขอ Hosted OAuth client จาก OpenAI"}</span></div>
+              : <div><strong>ChatGPT Plus ไม่พร้อมใช้งาน</strong><span>{chatGPT.apiKeyConfigured ? "ตอนนี้ระบบจะใช้ OpenAI API key แทน" : "เปิด SIWC สำหรับเซิร์ฟเวอร์ local หรือตั้ง OpenAI API key"}</span></div>}
+      </div>}
+      {form.mode === "home" && <button className="ai-generate" type="button" disabled={busy || generating} onClick={generate}>{generating ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />} {generating ? "กำลังค้นหาและสร้างสูตร…" : "สร้างสูตรด้วย AI"}</button>}
+      {sources.length > 0 && <div className="ai-sources"><span>แหล่งข้อมูลที่ AI ใช้</span><ul>{sources.map((source) => <li key={source.url}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a></li>)}</ul></div>}
       {error && <p className="error-message" role="alert">{error}</p>}
       <button className={`button-primary ${removing ? "danger-button" : ""}`} type="submit" disabled={busy}>{busy ? <LoaderCircle className="spin" size={18} /> : removing ? <Trash2 size={18} /> : <Save size={18} />} {busy ? "กำลังบันทึก…" : removing ? "ยืนยันลบเมนู" : "บันทึกเมนู"}</button>
     </form>
   </dialog>;
 }
 
+function FavoriteForm({ menu, favorite, onSave, onClose, busy }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const dialog = useRef(null);
+  const passwordInput = useRef(null);
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialog.current?.showModal();
+    passwordInput.current?.focus();
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, []);
+  async function submit(event) {
+    event.preventDefault(); setError("");
+    try { await onSave(password); }
+    catch (cause) { setError(cause.message); }
+  }
+  return <dialog className="recipe-dialog favorite-dialog" aria-labelledby="favorite-form-title" ref={dialog} onClose={onClose}>
+    <div className="dialog-heading"><div><p className="eyebrow">OUR FAVORITE TABLE</p><h2 id="favorite-form-title">{favorite ? "เก็บเมนูนี้ไว้ในใจ" : "เอาออกจากเมนูโปรด"}</h2></div><button className="icon-button" type="button" aria-label="ปิด" disabled={busy} onClick={() => dialog.current.close()}><X size={20} /></button></div>
+    <form className="recipe-form" onSubmit={submit}>
+      <p className="favorite-summary"><Heart size={18} fill="currentColor" /> {menu.name}</p>
+      <label><span className="flex items-center gap-2"><LockKeyhole size={15} /> รหัสผ่านเจ้าของสูตร</span><input ref={passwordInput} type="password" required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+      {error && <p className="error-message" role="alert">{error}</p>}
+      <button className="button-primary" type="submit" disabled={busy}>{busy ? <LoaderCircle className="spin" size={18} /> : <Heart size={18} fill="currentColor" />} {busy ? "กำลังบันทึก…" : favorite ? "เพิ่มเป็นเมนูโปรด" : "นำออกจากเมนูโปรด"}</button>
+    </form>
+  </dialog>;
+}
+
 export default function App() {
   const [mode, setMode] = useState("food");
-  const [backgroundMoving, setBackgroundMoving] = useState(() => !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const [recipes, setRecipes] = useState([]);
   const [loadState, setLoadState] = useState("loading");
   const [selected, setSelected] = useState(null);
@@ -113,6 +193,8 @@ export default function App() {
   const [copyState, setCopyState] = useState("");
   const [notice, setNotice] = useState("");
   const [legacyRecipes, setLegacyRecipes] = useState([]);
+  const [favoritePrompt, setFavoritePrompt] = useState(null);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
   const generation = useRef(0);
   const loadGeneration = useRef(0);
   const rollTimer = useRef(null);
@@ -135,18 +217,24 @@ export default function App() {
   }
   useEffect(() => {
     loadRecipes();
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("chatgpt");
+    if (result) {
+      setNotice(result === "connected" ? "เชื่อมต่อ ChatGPT สำเร็จแล้ว" : "เชื่อมต่อ ChatGPT ไม่สำเร็จ ลองอีกครั้งนะ");
+      if (result === "connected") {
+        setMode("home");
+        setEditor({ operation: "add", menu: { mode: "home", category: "ทำกินเอง" } });
+      }
+      params.delete("chatgpt");
+      const query = params.toString();
+      window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+    }
     try {
       const old = JSON.parse(localStorage.getItem("meal-picker-home-recipes-v1") || "[]");
       if (Array.isArray(old)) setLegacyRecipes(old.filter((recipe) => !validateRecipe(recipe)));
     } catch { /* Existing browser data stays untouched. */ }
   }, []);
   useEffect(() => () => clearTimeout(rollTimer.current), []);
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const change = (event) => { setReducedMotion(event.matches); if (event.matches) setBackgroundMoving(false); };
-    media.addEventListener("change", change);
-    return () => media.removeEventListener("change", change);
-  }, []);
   useEffect(() => {
     const timer = setTimeout(() => {
       categoryArt[mode].forEach((art) => { const image = new Image(); image.src = `/menu-${art}.webp`; });
@@ -187,7 +275,7 @@ export default function App() {
     if (!next) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { choose(next); return; }
     setRolling(true);
-    rollTimer.current = setTimeout(() => choose(next), 260);
+    rollTimer.current = setTimeout(() => choose(next), 440);
   }
   async function copy() {
     const current = generation.current;
@@ -208,6 +296,26 @@ export default function App() {
       setTag(""); setNotice(removing ? "ลบเมนูแล้ว" : "บันทึกเมนูแล้ว");
     } finally { setBusy(false); }
   }
+  function applyFavorite(menuId, favorite) {
+    setRecipes((current) => current.map((menu) => menu.id === menuId ? { ...menu, favorite } : menu));
+    setSelected((current) => current?.id === menuId ? { ...current, favorite } : current);
+    setNotice(favorite ? "เพิ่มในเมนูโปรดแล้ว" : "นำออกจากเมนูโปรดแล้ว");
+  }
+  async function saveFavorite(menu, favorite, password = "") {
+    setFavoriteBusy(true);
+    try {
+      const result = await api("/api/favorites", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ menuId: menu.id, favorite, password }) });
+      applyFavorite(result.menuId, result.favorite);
+    } finally { setFavoriteBusy(false); }
+  }
+  async function toggleFavorite(menu) {
+    const favorite = !menu.favorite;
+    try { await saveFavorite(menu, favorite); }
+    catch (cause) {
+      if (cause.status === 401) { setFavoritePrompt({ menu, favorite }); setNotice(""); }
+      else setNotice(cause.message);
+    }
+  }
   function exportLegacy() {
     const blob = new Blob([JSON.stringify(legacyRecipes, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -216,16 +324,17 @@ export default function App() {
   }
 
   return <div className="app-shell">
-    <div className={`tartan-backdrop ${backgroundMoving ? "" : "is-paused"}`} aria-hidden="true" />
-    <header className="site-header"><a className="brand" href="#"><Heart size={20} fill="currentColor" /> Meal Picker <span className="brand-sub">for you</span></a><div className="header-controls"><button className="icon-button motion-toggle" type="button" aria-pressed={backgroundMoving} aria-label={backgroundMoving ? "หยุดพื้นหลัง" : "ขยับพื้นหลัง"} title={reducedMotion ? "พื้นหลังนิ่งตามการตั้งค่าลดการเคลื่อนไหว" : backgroundMoving ? "หยุดพื้นหลัง" : "ขยับพื้นหลัง"} disabled={reducedMotion} onClick={() => setBackgroundMoving((value) => !value)}>{backgroundMoving ? <Pause size={16} /> : <Play size={16} />}</button><MusicToggle /></div></header>
-    <main className="main-content">
-      <div className="intro"><p className="eyebrow"><Heart size={12} fill="currentColor" /> A LITTLE LESS THINKING, A LITTLE MORE US</p><h1>วันนี้กินอะไรดี?</h1><p className="muted">มาสุ่มกันนนน</p></div>
+    <a className="skip-link" href="#main-content">ข้ามไปเลือกเมนู</a>
+    <div className="tartan-backdrop" aria-hidden="true" />
+    <header className="site-header"><a className="brand" href="#" aria-label="Meal Picker for you หน้าแรก"><span className="brand-mark"><Heart size={18} fill="currentColor" /></span><span>Meal Picker <em>for you</em></span></a><div className="header-note" aria-hidden="true">OUR DAILY TABLE · 2026</div><div className="header-controls"><MusicToggle /></div></header>
+    <main className="main-content" id="main-content">
+      <div className="intro"><span className="intro-index" aria-hidden="true">01 / PICK A MOOD</span><p className="eyebrow"><Heart size={12} fill="currentColor" /> A LITTLE LESS THINKING, A LITTLE MORE US</p><h1>วันนี้<br/><span>กินอะไรดี?</span></h1><p className="muted">ไม่ต้องคิดเยอะ เดี๋ยวโต๊ะนี้เลือกให้เอง</p><span className="intro-note" aria-hidden="true">สุ่มด้วยใจ<br/>เสิร์ฟด้วยรัก</span></div>
       <div className="mode-tabs" role="group" aria-label="เลือกหมวดเมนู">{modes.map(({ id, label, icon: Icon }) => <button type="button" key={id} aria-pressed={mode === id} onClick={() => changeMode(id)}><Icon size={18} /><span>{label}</span></button>)}</div>
       <div className="mode-meta"><span>{active.note}</span><span>{menus.length} เมนู{home && " · 2 คน"}</span></div>
       <div className="filter-bar"><SlidersHorizontal size={16} /><select aria-label="เลือกแท็กสำหรับสุ่ม" value={tag} onChange={(event) => changeTag(event.target.value)}><option value="">ทุกแท็ก</option>{tags.map((value) => <option key={value} value={value}>{value}</option>)}</select>{tag && <span>{pool.length} เมนู</span>}</div>
       <section className={`picker-result ${home ? "home-result" : mode === "snacks" ? "snack-result" : ""} ${rolling ? "is-rolling" : ""}`} aria-live="polite" aria-busy={rolling}>
         <div key={revision} className="result-content">
-          <div className="result-topline"><span className="result-kicker">{selected ? "เมนูนี้… เลือกให้เธอ" : home ? "เข้าครัวด้วยกัน" : mode === "snacks" ? "เวลาของความหวาน" : "มื้ออร่อยของเรา"}</span><Heart size={18} fill="currentColor" aria-hidden="true" /></div>
+          <div className="result-topline"><span className="result-kicker">{selected ? "เมนูนี้… เลือกให้เธอ" : home ? "เข้าครัวด้วยกัน" : mode === "snacks" ? "เวลาของความหวาน" : "มื้ออร่อยของเรา"}</span>{selected?.id ? <button className={`favorite-button ${selected.favorite ? "is-favorite" : ""}`} type="button" aria-label={selected.favorite ? `นำ ${selected.name} ออกจากเมนูโปรด` : `เพิ่ม ${selected.name} เป็นเมนูโปรด`} aria-pressed={Boolean(selected.favorite)} disabled={favoriteBusy} onClick={() => toggleFavorite(selected)}><Heart size={19} fill={selected.favorite ? "currentColor" : "none"} /></button> : <Heart size={18} fill="currentColor" aria-hidden="true" />}</div>
           <div className="result-art" aria-hidden="true"><img src={`/menu-${artwork}.webp`} alt="" width="180" height="150" /></div>
           <span className="tag">{selected?.category || (home ? "สำหรับเราสองคน" : mode === "snacks" ? "a little sweet treat" : "a little comfort food")}</span>
           <h2>{selected?.name || (loadState === "ready" && !pool.length ? "เพิ่มเมนูแรกของเรากัน" : active.empty)}</h2>
@@ -233,7 +342,7 @@ export default function App() {
           {home && <span className="result-servings"><Users size={14} /> สำหรับเราสองคน</span>}
         </div>
       </section>
-      <div className="result-actions"><button className={`button-primary ${rolling ? "shuffle-active" : ""}`} type="button" disabled={!pool.length || loadState === "loading" || rolling} onClick={randomize}>{loadState === "loading" ? <LoaderCircle className="spin" size={20} /> : <Shuffle size={20} />} สุ่มเมนูให้เธอ</button><button className="icon-button copy-button" type="button" title={home ? "คัดลอกสูตรและวัตถุดิบ" : "คัดลอกเมนู"} aria-label={home ? "คัดลอกสูตรและวัตถุดิบ" : "คัดลอกเมนู"} disabled={!selected || rolling} onClick={copy}>{copyState === "คัดลอกแล้ว" ? <Check size={20} /> : <Copy size={20} />}</button></div>
+      <div className="result-actions"><button className={`button-primary ${rolling ? "shuffle-active" : ""}`} type="button" aria-busy={rolling} disabled={!pool.length || loadState === "loading" || rolling} onClick={randomize}>{loadState === "loading" ? <LoaderCircle className="spin" size={20} /> : rolling ? <LoaderCircle className="rolling-loader" size={20} /> : <Shuffle size={20} />} {rolling ? "กำลังสุ่ม…" : "สุ่มเมนูให้เธอ"}</button><button className="icon-button copy-button" type="button" title={home ? "คัดลอกสูตรและวัตถุดิบ" : "คัดลอกเมนู"} aria-label={home ? "คัดลอกสูตรและวัตถุดิบ" : "คัดลอกเมนู"} disabled={!selected || rolling} onClick={copy}>{copyState === "คัดลอกแล้ว" ? <Check size={20} /> : <Copy size={20} />}</button></div>
       <p className="feedback" role="status">{copyState || notice}</p>
       {loadState === "error" && <div className="error-message" role="alert">เชื่อมต่อลิสต์ที่บันทึกไว้ไม่ได้ กำลังแสดงเมนูเริ่มต้น <button type="button" onClick={loadRecipes}>ลองอีกครั้ง</button></div>}
       <div className="library-bar"><button className="library-toggle" type="button" aria-expanded={listOpen} aria-controls="menu-library" onClick={() => setListOpen((value) => !value)}><List size={18} /> {listOpen ? "ซ่อนลิสต์เมนู" : "ดูลิสต์เมนู"}<span className="library-count">{menus.length}</span><ChevronDown size={17} className={listOpen ? "chevron-open" : ""} /></button><button className="add-recipe" type="button" disabled={loadState !== "ready"} onClick={() => setEditor({ operation: "add", menu: { mode, category: home ? "ทำกินเอง" : mode === "snacks" ? "ของหวาน" : "comfort" } })}><Plus size={17} /> เพิ่มเมนู</button></div>
@@ -253,5 +362,6 @@ export default function App() {
       <footer className="app-footer"><Heart size={14} /> {home ? "มื้อธรรมดา ที่พิเศษเพราะกินด้วยกัน" : "กินให้อร่อยนะคนเก่ง"}</footer>
     </main>
     {editor && <MenuForm initial={editor.menu} operation={editor.operation} onSave={saveRecipe} onClose={() => setEditor(null)} busy={busy} />}
+    {favoritePrompt && <FavoriteForm menu={favoritePrompt.menu} favorite={favoritePrompt.favorite} busy={favoriteBusy} onClose={() => setFavoritePrompt(null)} onSave={async (password) => { await saveFavorite(favoritePrompt.menu, favoritePrompt.favorite, password); setFavoritePrompt(null); }} />}
   </div>;
 }

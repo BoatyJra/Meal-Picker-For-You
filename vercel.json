@@ -4,5 +4,5 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "git": { "deploymentEnabled": { "dev": false } },
-  "functions": { "api/*.js": { "maxDuration": 10 } }
+  "functions": { "api/*.js": { "maxDuration": 60 } }
 }

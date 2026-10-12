@@ -15,7 +15,9 @@ Do not reuse production Turso credentials while testing deletion.
 
 All three categories support adding, editing, deleting, searching, and tag-based
 randomization. Writes require `RECIPE_PASSWORD`; it is sent in JSON so Thai
-passwords work. Passwords are not stored with menus or in browser storage.
+passwords work. After a successful check, the server issues a signed, HTTP-only
+session cookie valid for eight hours. The password is not stored with menus or
+in browser storage.
 The interface uses self-hosted Kanit fonts and small transparent food illustrations.
 Each category rotates through five artwork choices, avoiding immediate repeats.
 List thumbnails follow menu types; the result's artwork is decorative category art,
@@ -33,7 +35,11 @@ and seeds food/snacks once. Deleted starter menus are not restored on restart.
 ## Local Development
 
 Use Node.js 22 or newer. Run `npm install`, copy `.env.example` to `.env`,
-set `RECIPE_PASSWORD`, and run `npm run dev`.
+set `RECIPE_PASSWORD`, and run `npm run dev`. For AI recipe generation, open the
+home-recipe editor and choose **Continue with ChatGPT** to use an eligible ChatGPT
+plan without API credits. The local authorization is stored server-side in
+`CHATGPT_DATA_DIR`; it is never exposed to the browser. As a fallback, set
+`OPENAI_API_KEY`; `OPENAI_RECIPE_MODEL` can override the API model.
 
 Open http://127.0.0.1:5173. The API runs on port 3001 via Vite's proxy.
 `npm run dev` always uses the isolated `data/dev/recipes.sqlite` database and
@@ -58,11 +64,19 @@ To explicitly test a hosted database, use `npm start` with both Turso variables.
 | `TURSO_DATABASE_URL` | The hosted database URL (usually `libsql://...`) |
 | `TURSO_AUTH_TOKEN` | A database token with read/write access |
 | `RECIPE_PASSWORD` | A long private password for adding recipes |
+| `OPENAI_API_KEY` | Server-only OpenAI API key for recipe generation |
+| `OPENAI_RECIPE_MODEL` | Optional model override (defaults to `gpt-5.6-luna`) |
 
 Use Vercel's encrypted environment settings. Never add `VITE_` to these names,
 put them in frontend code, or commit `.env`. Production and Preview environment
 variables are configured separately: use a separate test database for previews
 if you do not want preview writes to change production recipes.
+
+Sign in with ChatGPT for a remotely hosted app requires an approved OAuth client
+from OpenAI. The local dynamic-client/loopback flow intentionally does not run on
+Vercel. Until the hosted client is approved and configured, Vercel recipe generation
+uses `OPENAI_API_KEY`. Request access at
+[Sign in with ChatGPT: Request a client ID](https://developers.openai.com/siwc/request-client-id).
 
 4. Deploy. `/api/health` confirms the database connection and initialization.
    Eight starter recipes and 60 food/snack menus are seeded once on a new database.
@@ -102,9 +116,17 @@ and the source file is preserved. Back up your recipes before changing hosting.
 Home recipe quantities serve two; they are usage amounts, not Makro package sizes.
 Common ingredients are used, but store availability and prices are not verified.
 TikTok links open the original video; ingredients and steps are entered manually.
-Public users can browse. Adding, editing, or deleting a menu requires the owner password, which is
-not stored in the browser. Previously saved browser recipes can be downloaded
+Public users can browse. Adding, editing, deleting, or generating a menu requires the owner password once every
+eight hours per browser. Only a signed HTTP-only session token is stored; the
+password itself is not stored in the browser. Previously saved browser recipes can be downloaded
 from the home-cooking view and imported using the command above.
+
+In the home-recipe editor, enter a menu name and owner password, then choose
+**สร้างสูตรด้วย AI**. The server prefers the connected ChatGPT plan locally and
+otherwise uses the configured API key. It calls the OpenAI Responses API with web search
+to draft a two-person Thai recipe and look for a matching TikTok source. Results
+and source links are shown for review and are never saved automatically. Keep
+all credentials server-side and never expose them through a `VITE_` variable.
 
 ## Verification
 

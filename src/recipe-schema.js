@@ -7,6 +7,17 @@ export function validTikTokUrl(value) {
   } catch { return false; }
 }
 
+export function tiktokVideoId(value) {
+  if (!validTikTokUrl(value)) return "";
+  try {
+    return new URL(value).pathname.match(/\/video\/(\d+)/)?.[1] || "";
+  } catch { return ""; }
+}
+
+export function tiktokSearchUrl(name) {
+  return `https://www.tiktok.com/search?q=${encodeURIComponent(`${name.trim()} วิธีทำ`)}`;
+}
+
 export function validateRecipe(recipe) {
   if (!recipe || typeof recipe.name !== "string" || !recipe.name.trim() || recipe.name.length > 100) return "กรอกชื่อเมนู ไม่เกิน 100 ตัวอักษร";
   if (typeof recipe.video !== "string" || recipe.video.length > 2000 || !validTikTokUrl(recipe.video)) return "ใช้ลิงก์ https:// ของ TikTok เท่านั้น";

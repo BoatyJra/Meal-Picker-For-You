@@ -31,6 +31,7 @@ export async function initializeDatabase() {
       await db.batch([
       "CREATE TABLE IF NOT EXISTS recipes (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE UNIQUE, body TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS menus (id INTEGER PRIMARY KEY AUTOINCREMENT, mode TEXT NOT NULL, name TEXT NOT NULL COLLATE NOCASE, body TEXT NOT NULL, UNIQUE(mode, name))",
+      "CREATE TABLE IF NOT EXISTS favorites (menu_id INTEGER PRIMARY KEY)",
       "CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY)",
       ], "write");
       const migration = await db.execute("SELECT name FROM migrations WHERE name = 'all-menus-v1'");
@@ -52,8 +53,17 @@ export async function initializeDatabase() {
 
 export async function listMenus() {
   await initializeDatabase();
-  const result = await getClient().execute("SELECT id, body FROM menus ORDER BY id");
-  return result.rows.map((row) => ({ ...JSON.parse(row.body), id: Number(row.id) }));
+  const result = await getClient().execute("SELECT menus.id, menus.body, favorites.menu_id IS NOT NULL AS favorite FROM menus LEFT JOIN favorites ON favorites.menu_id = menus.id ORDER BY menus.id");
+  return result.rows.map((row) => ({ ...JSON.parse(row.body), id: Number(row.id), favorite: Boolean(row.favorite) }));
+}
+
+export async function setFavorite(menuId, favorite) {
+  await initializeDatabase();
+  const menu = await getClient().execute({ sql: "SELECT id FROM menus WHERE id = ?", args: [menuId] });
+  if (!menu.rows.length) return null;
+  if (favorite) await getClient().execute({ sql: "INSERT OR IGNORE INTO favorites (menu_id) VALUES (?)", args: [menuId] });
+  else await getClient().execute({ sql: "DELETE FROM favorites WHERE menu_id = ?", args: [menuId] });
+  return { menuId, favorite };
 }
 
 export async function insertMenu(recipe) {

@@ -20,7 +20,7 @@ test(`${entry} (${ownerPassword === "test-owner-password" ? "ASCII" : "Unicode"}
   let errors = "";
   async function start() {
     server = spawn(process.execPath, [entry], {
-      env: { ...process.env, PORT: String(port), DATA_DIR: directory, DEV_DATA_DIR: directory, DEV_RECIPE_PASSWORD: ownerPassword, RECIPE_PASSWORD: ownerPassword, TURSO_DATABASE_URL: entry === "server/dev.js" ? "libsql://must-not-connect.example" : "", TURSO_AUTH_TOKEN: "", VERCEL: "" },
+      env: { ...process.env, PORT: String(port), DATA_DIR: directory, DEV_DATA_DIR: directory, DEV_RECIPE_PASSWORD: ownerPassword, RECIPE_PASSWORD: ownerPassword, OPENAI_API_KEY: "", SIWC_LOCAL_ENABLED: "false", TURSO_DATABASE_URL: entry === "server/dev.js" ? "libsql://must-not-connect.example" : "", TURSO_AUTH_TOKEN: "", VERCEL: "" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     server.stderr.on("data", (chunk) => { errors += chunk.toString(); });
@@ -45,12 +45,23 @@ test(`${entry} (${ownerPassword === "test-owner-password" ? "ASCII" : "Unicode"}
     await start();
     const initial = await (await fetch(`${url}/api/recipes`)).json();
     assert.equal(initial.length, 8);
+    const generate = (password) => fetch(`${url}/api/generate-recipe`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "ผัดกะเพรา", password }),
+    });
+    assert.equal((await generate("incorrect")).status, 401);
+    assert.equal((await generate(ownerPassword)).status, 503);
     assert.equal((await post(recipe, "incorrect")).status, 401);
     assert.equal((await post(recipe, null)).status, 401);
     assert.equal((await post({ ...recipe, video: "https://tiktok.com.evil.example/video/123" })).status, 400);
     assert.equal((await post({ ...recipe, ingredients: [] })).status, 400);
     const response = await post(recipe);
     assert.equal(response.status, 201);
+    const setCookie = response.headers.get("set-cookie");
+    assert.match(setCookie, /meal_picker_owner=/);
+    assert.match(setCookie, /Max-Age=28800/);
+    assert.match(setCookie, /HttpOnly/);
+    assert.match(setCookie, /SameSite=Strict/);
+    const sessionCookie = setCookie.split(";")[0];
     const saved = await response.json();
     assert.ok(saved.id);
     assert.equal(Object.hasOwn(saved, "password"), false);
@@ -59,6 +70,11 @@ test(`${entry} (${ownerPassword === "test-owner-password" ? "ASCII" : "Unicode"}
     await start();
     const reloaded = await (await fetch(`${url}/api/recipes`)).json();
     assert.equal(reloaded.length, 9);
+    const sessionEdit = await fetch(`${url}/api/menus`, {
+      method: "PUT", headers: { "Content-Type": "application/json", "Cookie": sessionCookie },
+      body: JSON.stringify({ ...saved, mode: "home", category: "Session authenticated" }),
+    });
+    assert.equal(sessionEdit.status, 200);
     assert.deepEqual(reloaded.find((item) => item.id === saved.id).ingredients, recipe.ingredients);
     assert.equal(reloaded.find((item) => item.id === saved.id).video, recipe.video);
     assert.equal(Object.hasOwn(reloaded.find((item) => item.id === saved.id), "password"), false);
