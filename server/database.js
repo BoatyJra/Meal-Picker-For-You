@@ -2,7 +2,7 @@ import { createClient } from "@libsql/client";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { homeMenus, foodMenus, snackMenus } from "../src/menus.js";
+import { homeMenus, foodMenus, snackMenus, restaurantMenus } from "../src/menus.js";
 
 let client;
 let initialized;
@@ -37,16 +37,25 @@ export async function initializeDatabase() {
       "CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY)",
       ], "write");
       const migration = await db.execute("SELECT name FROM migrations WHERE name = 'all-menus-v1'");
-      if (migration.rows.length) return;
-      const legacy = await db.execute("SELECT id, body FROM recipes ORDER BY id");
-      const seeds = legacy.rows.length ? legacy.rows.map((row) => JSON.parse(row.body)) : homeMenus;
-      // Seed and migrate exactly once, including across concurrent cold starts.
-      await db.batch([
-        ...[["home", seeds], ["food", foodMenus], ["snacks", snackMenus]].flatMap(([mode, items]) => items.map((menu) => ({
-          sql: "INSERT OR IGNORE INTO menus (mode, name, body) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE name = 'all-menus-v1')",
-          args: [mode, menu.name, JSON.stringify({ ...menu, mode, video: menu.video || "", ingredients: menu.ingredients || [], steps: menu.steps || [] })],
-        }))),
-        "INSERT OR IGNORE INTO migrations (name) VALUES ('all-menus-v1')",
+      if (!migration.rows.length) {
+        const legacy = await db.execute("SELECT id, body FROM recipes ORDER BY id");
+        const seeds = legacy.rows.length ? legacy.rows.map((row) => JSON.parse(row.body)) : homeMenus;
+        // Seed and migrate exactly once, including across concurrent cold starts.
+        await db.batch([
+          ...[["home", seeds], ["food", foodMenus], ["snacks", snackMenus]].flatMap(([mode, items]) => items.map((menu) => ({
+            sql: "INSERT OR IGNORE INTO menus (mode, name, body) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE name = 'all-menus-v1')",
+            args: [mode, menu.name, JSON.stringify({ ...menu, mode, video: menu.video || "", ingredients: menu.ingredients || [], steps: menu.steps || [] })],
+          }))),
+          "INSERT OR IGNORE INTO migrations (name) VALUES ('all-menus-v1')",
+        ], "write");
+      }
+      const dineInMigration = await db.execute("SELECT name FROM migrations WHERE name = 'dine-in-v1'");
+      if (!dineInMigration.rows.length) await db.batch([
+        ...restaurantMenus.map((menu) => ({
+          sql: "INSERT OR IGNORE INTO menus (mode, name, body) SELECT 'dinein', ?, ? WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE name = 'dine-in-v1')",
+          args: [menu.name, JSON.stringify({ ...menu, mode: "dinein", video: "", ingredients: [], steps: [] })],
+        })),
+        "INSERT OR IGNORE INTO migrations (name) VALUES ('dine-in-v1')",
       ], "write");
     })().catch((error) => { initialized = undefined; throw error; });
   }

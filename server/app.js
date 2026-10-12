@@ -71,18 +71,20 @@ function authorize(req, res, next) {
   const expected = process.env.RECIPE_PASSWORD;
   if (!expected) return res.status(503).json({ error: "ยังไม่ได้ตั้งรหัสผ่านสำหรับเพิ่มสูตร" });
   if (hasValidSession(req, expected)) return next();
-  const now = Date.now();
-  for (const [key, value] of attempts) if (now > value.reset) attempts.delete(key);
-  const address = process.env.VERCEL ? req.get("x-vercel-forwarded-for") || req.socket.remoteAddress : req.socket.remoteAddress;
-  const bucket = attempts.get(address) || { count: 0, reset: now + 60000 };
-  attempts.set(address, bucket);
-  if (++bucket.count > 30) return res.status(429).json({ error: "ลองใหม่อีกครั้งในหนึ่งนาที" });
   const authorization = req.get("authorization") || "";
   // JSON supports Unicode passwords; accept legacy headers for cached clients.
   const password = typeof req.body?.password === "string" ? req.body.password : authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
   const received = Buffer.from(password);
   const secret = Buffer.from(expected);
-  if (received.length !== secret.length || !timingSafeEqual(received, secret)) return res.status(401).json({ error: "รหัสผ่านไม่ถูกต้อง" });
+  if (received.length !== secret.length || !timingSafeEqual(received, secret)) {
+    const now = Date.now();
+    for (const [key, value] of attempts) if (now > value.reset) attempts.delete(key);
+    const address = process.env.VERCEL ? req.get("x-vercel-forwarded-for") || req.socket.remoteAddress : req.socket.remoteAddress;
+    const bucket = attempts.get(address) || { count: 0, reset: now + 60000 };
+    attempts.set(address, bucket);
+    if (++bucket.count > 30) return res.status(429).json({ error: "ลองใหม่อีกครั้งในหนึ่งนาที" });
+    return res.status(401).json({ error: "รหัสผ่านไม่ถูกต้อง" });
+  }
   setSession(res, expected);
   next();
 }

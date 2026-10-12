@@ -7,11 +7,13 @@ test("Artwork follows the menu type in each mode", () => {
   assert.equal(menuArt({ name: "ข้าวกะเพราไก่ไข่ดาว", category: "ตามสั่ง" }, "food"), "rice");
   assert.equal(menuArt({ name: "ชามะนาวหวาน 30", category: "เครื่องดื่ม" }, "snacks"), "drink");
   assert.equal(menuArt({ name: "เค้กช็อกโกแลต", category: "เค้ก" }, "snacks"), "sweet");
+  assert.equal(menuArt({ name: "Bar B Q Plaza", category: "ปิ้งย่าง" }, "dinein"), "fried");
+  assert.equal(menuArt({ name: "MK Restaurants", category: "สุกี้ / ชาบู" }, "dinein"), "cooking");
   assert.equal(menuArt(null, "home"), "rice");
 });
 
 test("Each category has five artwork choices and avoids immediate repeats", () => {
-  for (const mode of ["food", "snacks", "home"]) {
+  for (const mode of ["food", "snacks", "dinein", "home"]) {
     assert.equal(new Set(categoryArt[mode]).size, 5);
     const all = new Set(Array.from({ length: 5 }, (_, index) => randomCategoryArt(mode, null, () => (index + .5) / 5)));
     assert.deepEqual(all, new Set(categoryArt[mode]));

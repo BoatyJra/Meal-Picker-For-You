@@ -64,6 +64,39 @@ export const snackMenus = [
   { name: "สตรอว์เบอร์รีโซดา", category: "เครื่องดื่ม" },
 ];
 
+export const restaurantMenus = [
+  { name: "MK Restaurants", category: "สุกี้ / ชาบู" },
+  { name: "MK Gold", category: "สุกี้ / ชาบู" },
+  { name: "Bar B Q Plaza", category: "ปิ้งย่าง" },
+  { name: "สุกี้ตี๋น้อย", category: "สุกี้ / ชาบู" },
+  { name: "Shabushi by Oishi", category: "สุกี้ / ชาบู" },
+  { name: "Mo-Mo-Paradise", category: "สุกี้ / ชาบู" },
+  { name: "You & I Premium Suki Buffet", category: "สุกี้ / ชาบู" },
+  { name: "Kouen Sushi Bar", category: "บุฟเฟต์ญี่ปุ่น" },
+  { name: "AKA Yakiniku", category: "ปิ้งย่าง" },
+  { name: "Sukishi Korean Charcoal Grill", category: "ปิ้งย่าง" },
+  { name: "Fuji Japanese Restaurant", category: "ญี่ปุ่น" },
+  { name: "Yayoi", category: "ญี่ปุ่น" },
+  { name: "Oishi Ramen", category: "ราเมน" },
+  { name: "Hachiban Ramen", category: "ราเมน" },
+  { name: "Katsuya", category: "ญี่ปุ่น" },
+  { name: "Sukiya", category: "ญี่ปุ่น" },
+  { name: "Pepper Lunch", category: "กระทะร้อน" },
+  { name: "Sizzler", category: "สเต๊ก / สลัด" },
+  { name: "Santa Fe' Steak", category: "สเต๊ก" },
+  { name: "Bonchon", category: "เกาหลี" },
+  { name: "The Pizza Company", category: "พิซซ่า" },
+  { name: "Pizza Hut", category: "พิซซ่า" },
+  { name: "Burger King", category: "เบอร์เกอร์" },
+  { name: "McDonald's", category: "เบอร์เกอร์" },
+  { name: "Chester's", category: "ไก่ย่าง" },
+  { name: "Greyhound Café", category: "คาเฟ่" },
+  { name: "S&P Restaurant", category: "ไทย / คาเฟ่" },
+  { name: "กับข้าว'กับปลา", category: "อาหารไทย" },
+  { name: "แหลมเจริญซีฟู้ด", category: "ซีฟู้ด" },
+  { name: "สมบูรณ์โภชนา", category: "ซีฟู้ด" },
+];
+
 export const homeMenus = [
   {
     name: "ข้าวกะเพราไก่ไข่ดาว", category: "ทำกินเอง",
@@ -106,4 +139,3 @@ export const homeMenus = [
     steps: ["หุงข้าว ซอยหอมแดงและต้นหอม", "รวนหมูสับกับน้ำจนสุกทั่ว ปิดไฟ", "คลุกซีอิ๊วขาว น้ำมะนาว พริกป่น และข้าวคั่ว", "ใส่หอมแดง ต้นหอม และสะระแหน่ แบ่งเสิร์ฟกับข้าว"],
   },
 ];
-

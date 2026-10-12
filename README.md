@@ -91,7 +91,7 @@ approved and configured, Vercel recipe generation uses `OPENAI_API_KEY`. Request
 access at [Sign in with ChatGPT: Request a client ID](https://developers.openai.com/siwc/request-client-id).
 
 4. Deploy. `/api/health` confirms the database connection and initialization.
-   Eight starter recipes and 60 food/snack menus are seeded once on a new database.
+   Eight starter recipes and 90 delivery/snack/dine-in choices are seeded once on a new database.
    Existing home recipes are migrated without deleting the original table.
 5. Open the home-cooking category and add a recipe using your owner password.
    Open the site on another device to confirm the saved recipe is shared.
@@ -124,7 +124,7 @@ and the source file is preserved. Back up your recipes before changing hosting.
 
 ## Recipe Features
 
-30 delivery menus, 30 snacks, and eight starter home recipes are included.
+30 delivery menus, 30 snacks, 30 dine-in restaurant choices, and eight starter home recipes are included.
 Home recipe quantities serve two; they are usage amounts, not Makro package sizes.
 Common ingredients are used, but store availability and prices are not verified.
 TikTok links open the original video; ingredients and steps are entered manually.

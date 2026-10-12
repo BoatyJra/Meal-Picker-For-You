@@ -30,7 +30,7 @@ export function validateRecipe(recipe) {
 }
 
 export function validateMenu(menu) {
-  if (!menu || !["food", "snacks", "home"].includes(menu.mode)) return "เลือกหมวดเมนูให้ถูกต้อง";
+  if (!menu || !["food", "snacks", "dinein", "home"].includes(menu.mode)) return "เลือกหมวดเมนูให้ถูกต้อง";
   if (typeof menu.name !== "string" || !menu.name.trim() || menu.name.length > 100) return "กรอกชื่อเมนู ไม่เกิน 100 ตัวอักษร";
   if (typeof menu.category !== "string" || !menu.category.trim() || menu.category.length > 40) return "กรอกแท็ก ไม่เกิน 40 ตัวอักษร";
   return menu.mode === "home" ? validateRecipe(menu) : null;

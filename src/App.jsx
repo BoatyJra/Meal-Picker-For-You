@@ -1,19 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { Heart, Utensils, CakeSlice, CookingPot, Shuffle, Copy, Check, ChevronDown,
-  Plus, ArrowUpRight, Users, ShoppingBasket, List, Search, X, LoaderCircle, LockKeyhole, Download, Pencil, Trash2, Save, SlidersHorizontal, Sparkles, LogIn, LogOut, RefreshCw } from "lucide-react";
-import { foodMenus, snackMenus, homeMenus } from "./menus.js";
+  Plus, ArrowUpRight, Users, ShoppingBasket, List, Search, X, LoaderCircle, LockKeyhole, Download, Pencil, Trash2, Save, SlidersHorizontal, Sparkles, LogIn, LogOut, RefreshCw, Store } from "lucide-react";
+import { foodMenus, snackMenus, restaurantMenus, homeMenus } from "./menus.js";
 import { validateRecipe, validateMenu, recipeText, tiktokVideoId } from "./recipe-schema.js";
 import { menuArt, categoryArt, randomCategoryArt } from "./menu-art.js";
 import MusicToggle from "./MusicToggle.jsx";
 
 const modes = [
   { id: "food", label: "สั่งอาหาร", icon: Utensils, note: "มื้ออร่อย ส่งถึงเธอ", empty: "มื้อนี้ให้เราเลือกนะ" },
+  { id: "dinein", label: "กินที่ร้าน", icon: Store, note: "ออกไปหาอะไรอร่อย ๆ กัน", empty: "วันนี้ไปกินร้านไหนดี?" },
   { id: "snacks", label: "ของกินเล่น", icon: CakeSlice, note: "เติมความหวานอีกนิด", empty: "พักเติมความหวานกัน" },
   { id: "home", label: "ทำกินเอง", icon: CookingPot, note: "มื้อเล็ก ๆ สำหรับเราสองคน", empty: "วันนี้เข้าครัวกันไหม?" },
 ];
 const messages = ["มื้อนี้เลือกให้แล้วนะ 💖", "อันนี้น่ากินมาก เธอลองมั้ย 💕", "พี่ว่าเมนูนี้เข้ากับวันนี้สุดๆ", "กินให้อร่อยนะคนเก่ง ✨", "มื้อนี้มีพี่คิดให้"];
 const pick = (items) => items[Math.floor(Math.random() * items.length)];
-const fallbackMenus = [...foodMenus.map((menu) => ({ ...menu, mode: "food" })), ...snackMenus.map((menu) => ({ ...menu, mode: "snacks" })), ...homeMenus.map((menu) => ({ ...menu, mode: "home" }))];
+const fallbackMenus = [...foodMenus.map((menu) => ({ ...menu, mode: "food" })), ...restaurantMenus.map((menu) => ({ ...menu, mode: "dinein" })), ...snackMenus.map((menu) => ({ ...menu, mode: "snacks" })), ...homeMenus.map((menu) => ({ ...menu, mode: "home" }))];
 
 async function api(url, options = {}) {
   const response = await fetch(url, options);
@@ -335,11 +336,11 @@ export default function App() {
       <div className="mode-tabs" role="group" aria-label="เลือกหมวดเมนู">{modes.map(({ id, label, icon: Icon }) => <button type="button" key={id} aria-pressed={mode === id} onClick={() => changeMode(id)}><Icon size={18} /><span>{label}</span></button>)}</div>
       <div className="mode-meta"><span>{active.note}</span><span>{menus.length} เมนู{home && " · 2 คน"}</span></div>
       <div className="filter-bar"><SlidersHorizontal size={16} /><select aria-label="เลือกแท็กสำหรับสุ่ม" value={tag} onChange={(event) => changeTag(event.target.value)}><option value="">ทุกแท็ก</option>{tags.map((value) => <option key={value} value={value}>{value}</option>)}</select>{tag && <span>{pool.length} เมนู</span>}</div>
-      <section className={`picker-result ${home ? "home-result" : mode === "snacks" ? "snack-result" : ""} ${rolling ? "is-rolling" : ""}`} aria-live="polite" aria-busy={rolling}>
+      <section className={`picker-result ${home ? "home-result" : mode === "snacks" ? "snack-result" : mode === "dinein" ? "dinein-result" : ""} ${rolling ? "is-rolling" : ""}`} aria-live="polite" aria-busy={rolling}>
         <div key={revision} className="result-content">
-          <div className="result-topline"><span className="result-kicker">{selected ? "เมนูนี้… เลือกให้เธอ" : home ? "เข้าครัวด้วยกัน" : mode === "snacks" ? "เวลาของความหวาน" : "มื้ออร่อยของเรา"}</span>{selected?.id ? <button className={`favorite-button ${selected.favorite ? "is-favorite" : ""}`} type="button" aria-label={selected.favorite ? `นำ ${selected.name} ออกจากเมนูโปรด` : `เพิ่ม ${selected.name} เป็นเมนูโปรด`} aria-pressed={Boolean(selected.favorite)} disabled={favoriteBusy} onClick={() => toggleFavorite(selected)}><Heart size={19} fill={selected.favorite ? "currentColor" : "none"} /></button> : <Heart size={18} fill="currentColor" aria-hidden="true" />}</div>
+          <div className="result-topline"><span className="result-kicker">{selected ? (mode === "dinein" ? "ร้านนี้… ไปด้วยกันนะ" : "เมนูนี้… เลือกให้เธอ") : home ? "เข้าครัวด้วยกัน" : mode === "snacks" ? "เวลาของความหวาน" : mode === "dinein" ? "มื้อนี้ออกไปกินข้างนอก" : "มื้ออร่อยของเรา"}</span>{selected?.id ? <button className={`favorite-button ${selected.favorite ? "is-favorite" : ""}`} type="button" aria-label={selected.favorite ? `นำ ${selected.name} ออกจากเมนูโปรด` : `เพิ่ม ${selected.name} เป็นเมนูโปรด`} aria-pressed={Boolean(selected.favorite)} disabled={favoriteBusy} onClick={() => toggleFavorite(selected)}><Heart size={19} fill={selected.favorite ? "currentColor" : "none"} /></button> : <Heart size={18} fill="currentColor" aria-hidden="true" />}</div>
           <div className="result-art" aria-hidden="true"><img src={`/menu-${artwork}.webp`} alt="" width="180" height="150" /></div>
-          <span className="tag">{selected?.category || (home ? "สำหรับเราสองคน" : mode === "snacks" ? "a little sweet treat" : "a little comfort food")}</span>
+          <span className="tag">{selected?.category || (home ? "สำหรับเราสองคน" : mode === "snacks" ? "a little sweet treat" : mode === "dinein" ? "our next table" : "a little comfort food")}</span>
           <h2>{selected?.name || (loadState === "ready" && !pool.length ? "เพิ่มเมนูแรกของเรากัน" : active.empty)}</h2>
           <p className="result-message">{message || "วันนี้ไม่ต้องคิดเยอะ เดี๋ยวเลือกให้เอง"}</p>
           {home && <span className="result-servings"><Users size={14} /> สำหรับเราสองคน</span>}
@@ -348,7 +349,7 @@ export default function App() {
       <div className="result-actions"><button className={`button-primary ${rolling ? "shuffle-active" : ""}`} type="button" aria-busy={rolling} disabled={!pool.length || loadState === "loading" || rolling} onClick={randomize}>{loadState === "loading" ? <LoaderCircle className="spin" size={20} /> : rolling ? <LoaderCircle className="rolling-loader" size={20} /> : <Shuffle size={20} />} {rolling ? "กำลังสุ่ม…" : "สุ่มเมนูให้เธอ"}</button><button className="icon-button copy-button" type="button" title={home ? "คัดลอกสูตรและวัตถุดิบ" : "คัดลอกเมนู"} aria-label={home ? "คัดลอกสูตรและวัตถุดิบ" : "คัดลอกเมนู"} disabled={!selected || rolling} onClick={copy}>{copyState === "คัดลอกแล้ว" ? <Check size={20} /> : <Copy size={20} />}</button></div>
       <p className="feedback" role="status">{copyState || notice}</p>
       {loadState === "error" && <div className="error-message" role="alert">เชื่อมต่อลิสต์ที่บันทึกไว้ไม่ได้ กำลังแสดงเมนูเริ่มต้น <button type="button" onClick={loadRecipes}>ลองอีกครั้ง</button></div>}
-      <div className="library-bar"><button className="library-toggle" type="button" aria-expanded={listOpen} aria-controls="menu-library" onClick={() => setListOpen((value) => !value)}><List size={18} /> {listOpen ? "ซ่อนลิสต์เมนู" : "ดูลิสต์เมนู"}<span className="library-count">{menus.length}</span><ChevronDown size={17} className={listOpen ? "chevron-open" : ""} /></button><button className="add-recipe" type="button" disabled={loadState !== "ready"} onClick={() => setEditor({ operation: "add", menu: { mode, category: home ? "ทำกินเอง" : mode === "snacks" ? "ของหวาน" : "comfort" } })}><Plus size={17} /> เพิ่มเมนู</button></div>
+      <div className="library-bar"><button className="library-toggle" type="button" aria-expanded={listOpen} aria-controls="menu-library" onClick={() => setListOpen((value) => !value)}><List size={18} /> {listOpen ? "ซ่อนลิสต์เมนู" : "ดูลิสต์เมนู"}<span className="library-count">{menus.length}</span><ChevronDown size={17} className={listOpen ? "chevron-open" : ""} /></button><button className="add-recipe" type="button" disabled={loadState !== "ready"} onClick={() => setEditor({ operation: "add", menu: { mode, category: home ? "ทำกินเอง" : mode === "snacks" ? "ของหวาน" : mode === "dinein" ? "ร้านอาหาร" : "comfort" } })}><Plus size={17} /> เพิ่มเมนู</button></div>
       <section id="menu-library" className={`library-reveal ${listOpen ? "is-open" : ""}`} aria-label="รายการเมนู" aria-hidden={!listOpen} inert={!listOpen}>
         <div className="library-clip"><div className="menu-library">
           <div className="library-heading"><h2>เมนูของเรา</h2><span>{filtered.length} / {menus.length} เมนู</span></div>
