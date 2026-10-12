@@ -1,7 +1,8 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { getAppState, setAppState } from "./database.js";
 
 const issuer = "https://auth.openai.com";
 const authorizationEndpoint = `${issuer}/api/accounts/authorize`;
@@ -10,10 +11,17 @@ const discoveryEndpoint = `${issuer}/.well-known/openid-configuration`;
 const jwks = createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`));
 const resource = "https://api.openai.com/v1";
 const scopes = "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct";
-const pending = new Map();
+const storeName = "chatgpt-auth-v1";
+
+function hostedConfig() {
+  const clientId = process.env.OPENAI_CHATGPT_CLIENT_ID;
+  const redirectUri = process.env.OPENAI_CHATGPT_REDIRECT_URI;
+  const encryptionKey = process.env.CHATGPT_TOKEN_ENCRYPTION_KEY;
+  return clientId && redirectUri && encryptionKey ? { clientId, redirectUri, encryptionKey } : null;
+}
 
 function available() {
-  return !process.env.VERCEL && process.env.SIWC_LOCAL_ENABLED !== "false";
+  return Boolean(hostedConfig()) || (!process.env.VERCEL && process.env.SIWC_LOCAL_ENABLED !== "false");
 }
 
 function storagePath() {
@@ -21,20 +29,47 @@ function storagePath() {
 }
 
 async function readStore() {
+  const hosted = hostedConfig();
+  if (hosted) {
+    const encrypted = await getAppState(storeName);
+    if (!encrypted) return { hostId: `urn:uuid:${randomUUID()}`, profile: null, pending: {} };
+    return decryptStore(encrypted, hosted.encryptionKey);
+  }
   try { return JSON.parse(await readFile(storagePath(), "utf8")); }
   catch (error) {
     if (error.code !== "ENOENT") throw error;
-    return { hostId: `urn:uuid:${randomUUID()}`, profile: null };
+    return { hostId: `urn:uuid:${randomUUID()}`, profile: null, pending: {} };
   }
 }
 
 async function writeStore(store) {
+  const hosted = hostedConfig();
+  if (hosted) return setAppState(storeName, encryptStore(store, hosted.encryptionKey));
   const destination = storagePath();
   await mkdir(path.dirname(destination), { recursive: true });
   const temporary = `${destination}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
   await writeFile(temporary, `${JSON.stringify(store, null, 2)}\n`, { mode: 0o600 });
   await rename(temporary, destination);
   await chmod(destination, 0o600);
+}
+
+function encryptionKey(secret) {
+  return createHash("sha256").update(secret).digest();
+}
+
+function encryptStore(store, secret) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", encryptionKey(secret), iv);
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(store), "utf8"), cipher.final()]);
+  return ["v1", iv.toString("base64url"), cipher.getAuthTag().toString("base64url"), ciphertext.toString("base64url")].join(".");
+}
+
+function decryptStore(value, secret) {
+  const [version, iv, tag, ciphertext] = String(value).split(".");
+  if (version !== "v1" || !iv || !tag || !ciphertext) throw new Error("Invalid encrypted ChatGPT store");
+  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(secret), Buffer.from(iv, "base64url"));
+  decipher.setAuthTag(Buffer.from(tag, "base64url"));
+  return JSON.parse(Buffer.concat([decipher.update(Buffer.from(ciphertext, "base64url")), decipher.final()]).toString("utf8"));
 }
 
 function verifier() {
@@ -46,12 +81,13 @@ function challenge(value) {
 }
 
 function redirectUri() {
-  return `http://127.0.0.1:${Number(process.env.PORT) || 3001}/auth/chatgpt/callback`;
+  return hostedConfig()?.redirectUri || `http://127.0.0.1:${Number(process.env.PORT) || 3001}/auth/chatgpt/callback`;
 }
 
 function appUrl(result) {
-  const base = process.env.LOCAL_APP_URL || "http://127.0.0.1:5173/";
-  const url = new URL(base);
+  const base = hostedConfig() ? process.env.PUBLIC_APP_URL : process.env.LOCAL_APP_URL;
+  const destination = base || "http://127.0.0.1:5173/";
+  const url = new URL(destination);
   url.searchParams.set("chatgpt", result);
   return url.href;
 }
@@ -64,29 +100,36 @@ function publicError(message, status = 502) {
 }
 
 async function tokenRequest(parameters) {
+  const body = new URLSearchParams(parameters);
+  const headers = { "Content-Type": "application/x-www-form-urlencoded" };
+  const secret = hostedConfig() && process.env.OPENAI_CHATGPT_CLIENT_SECRET;
+  const method = process.env.OPENAI_CHATGPT_TOKEN_AUTH_METHOD || (secret ? "client_secret_post" : "none");
+  if (secret && method === "client_secret_basic") headers.Authorization = `Basic ${Buffer.from(`${parameters.client_id}:${secret}`).toString("base64")}`;
+  else if (secret && method === "client_secret_post") body.set("client_secret", secret);
   const response = await fetch(tokenEndpoint, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(parameters),
+    headers,
+    body,
     signal: AbortSignal.timeout(30000),
   });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw publicError(body.error_description || body.error || "เชื่อมต่อบัญชี ChatGPT ไม่สำเร็จ", 401);
-  return body;
+  const responseBody = await response.json().catch(() => ({}));
+  if (!response.ok) throw publicError(responseBody.error_description || responseBody.error || "เชื่อมต่อบัญชี ChatGPT ไม่สำเร็จ", 401);
+  return responseBody;
 }
 
 export async function startChatGPTSignIn() {
-  if (!available()) throw publicError("การเชื่อมต่อ ChatGPT Plus แบบนี้ใช้ได้เฉพาะแอปที่รันในเครื่อง", 409);
+  if (!available()) throw publicError("การเชื่อมต่อ ChatGPT บนเว็บนี้ยังไม่ได้ตั้งค่า OAuth", 409);
   const store = await readStore();
   if (!store.hostId) store.hostId = `urn:uuid:${randomUUID()}`;
-  await writeStore(store);
+  if (!store.pending) store.pending = {};
   const state = verifier();
   const nonce = verifier();
   const codeVerifier = verifier();
-  const clientId = store.profile?.clientId || "dynamic_agent_client";
+  const clientId = hostedConfig()?.clientId || store.profile?.clientId || "dynamic_agent_client";
   const transaction = { state, nonce, codeVerifier, clientId, redirectUri: redirectUri(), createdAt: Date.now() };
-  pending.set(state, transaction);
-  for (const [key, value] of pending) if (Date.now() - value.createdAt > 10 * 60 * 1000) pending.delete(key);
+  store.pending[state] = transaction;
+  for (const [key, value] of Object.entries(store.pending)) if (Date.now() - value.createdAt > 10 * 60 * 1000) delete store.pending[key];
+  await writeStore(store);
 
   const url = new URL(authorizationEndpoint);
   url.search = new URLSearchParams({
@@ -107,8 +150,10 @@ export async function startChatGPTSignIn() {
 
 export async function finishChatGPTSignIn(query) {
   const state = typeof query?.state === "string" ? query.state : "";
-  const transaction = pending.get(state);
-  pending.delete(state);
+  const store = await readStore();
+  const transaction = store.pending?.[state];
+  if (store.pending) delete store.pending[state];
+  await writeStore(store);
   if (!transaction || Date.now() - transaction.createdAt > 10 * 60 * 1000) throw publicError("คำขอเชื่อมต่อหมดอายุ กรุณาเริ่มใหม่", 400);
   if (query.error) throw publicError("ยกเลิกการเชื่อมต่อ ChatGPT", 400);
   if (typeof query.code !== "string") throw publicError("ไม่ได้รับรหัสยืนยันจาก ChatGPT", 400);
@@ -133,7 +178,6 @@ export async function finishChatGPTSignIn(query) {
   const grantedScopes = String(tokens.scope || "").split(/\s+/).filter(Boolean);
   if (!grantedScopes.includes("chatgpt.tokens.use.direct")) throw publicError("ยังไม่ได้อนุญาตให้แอปใช้แพ็กเกจ ChatGPT", 403);
 
-  const store = await readStore();
   store.profile = {
     clientId,
     subject: verified.payload.sub,
@@ -195,11 +239,12 @@ export async function getChatGPTPlanProvider() {
 export async function chatGPTStatus() {
   if (!available()) return { available: false, connected: false, hostedApprovalRequired: Boolean(process.env.VERCEL), apiKeyConfigured: Boolean(process.env.OPENAI_API_KEY) };
   const store = await readStore();
+  const hosted = Boolean(hostedConfig());
   return {
     available: true,
+    hosted,
     connected: Boolean(store.profile?.accessToken && store.profile?.scopes?.includes("chatgpt.tokens.use.direct")),
-    email: store.profile?.email || "",
-    name: store.profile?.name || "",
+    ...(!hosted ? { email: store.profile?.email || "", name: store.profile?.name || "" } : {}),
     apiKeyConfigured: Boolean(process.env.OPENAI_API_KEY),
   };
 }

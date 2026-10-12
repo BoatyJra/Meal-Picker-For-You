@@ -73,10 +73,22 @@ variables are configured separately: use a separate test database for previews
 if you do not want preview writes to change production recipes.
 
 Sign in with ChatGPT for a remotely hosted app requires an approved OAuth client
-from OpenAI. The local dynamic-client/loopback flow intentionally does not run on
-Vercel. Until the hosted client is approved and configured, Vercel recipe generation
-uses `OPENAI_API_KEY`. Request access at
-[Sign in with ChatGPT: Request a client ID](https://developers.openai.com/siwc/request-client-id).
+from OpenAI. The local dynamic-client/loopback flow is never reused on Vercel.
+After approval, add the following encrypted Vercel Production variables:
+
+| Variable | Value |
+| --- | --- |
+| `OPENAI_CHATGPT_CLIENT_ID` | Approved client ID, usually beginning with `oaiapp_` |
+| `OPENAI_CHATGPT_CLIENT_SECRET` | Client secret when OpenAI issued a confidential client; otherwise leave blank |
+| `OPENAI_CHATGPT_TOKEN_AUTH_METHOD` | Method assigned by OpenAI: `none`, `client_secret_post`, or `client_secret_basic` |
+| `OPENAI_CHATGPT_REDIRECT_URI` | Exact registered URL, for example `https://your-domain/auth/chatgpt/callback` |
+| `PUBLIC_APP_URL` | Public app URL, including `https://` |
+| `CHATGPT_TOKEN_ENCRYPTION_KEY` | Long random server-only value used to encrypt OAuth credentials in Turso |
+
+The callback transaction and tokens are encrypted before being stored in Turso, so
+the flow survives separate Vercel function instances. Until the hosted client is
+approved and configured, Vercel recipe generation uses `OPENAI_API_KEY`. Request
+access at [Sign in with ChatGPT: Request a client ID](https://developers.openai.com/siwc/request-client-id).
 
 4. Deploy. `/api/health` confirms the database connection and initialization.
    Eight starter recipes and 60 food/snack menus are seeded once on a new database.
@@ -125,7 +137,9 @@ In the home-recipe editor, enter a menu name and owner password, then choose
 **สร้างสูตรด้วย AI**. The server prefers the connected ChatGPT plan locally and
 otherwise uses the configured API key. It calls the OpenAI Responses API with web search
 to draft a two-person Thai recipe and look for a matching TikTok source. Results
-and source links are shown for review and are never saved automatically. Keep
+and source links are shown for review and are never saved as a menu automatically.
+Generated drafts are cached in SQLite/Turso by normalized menu name to reduce AI usage;
+the editor offers **สร้างใหม่** when a fresh web search is wanted. Keep
 all credentials server-side and never expose them through a `VITE_` variable.
 
 ## Verification

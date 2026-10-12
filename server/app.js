@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { initializeDatabase, listRecipes, listMenus, insertMenu, updateMenu, deleteMenu, setFavorite } from "./database.js";
+import { initializeDatabase, listRecipes, listMenus, insertMenu, updateMenu, deleteMenu, setFavorite, getRecipeDraft, saveRecipeDraft } from "./database.js";
 import { validateMenu, cleanMenu } from "../src/recipe-schema.js";
 import { generateRecipe } from "./recipe-generator.js";
 import { chatGPTStatus, disconnectChatGPT, finishChatGPTSignIn, startChatGPTSignIn } from "./chatgpt-plan.js";
@@ -34,7 +34,7 @@ app.get("/auth/chatgpt/callback", async (req, res) => {
   try { res.redirect(303, await finishChatGPTSignIn(req.query)); }
   catch (error) {
     console.error("ChatGPT sign-in failed:", error.message);
-    const destination = new URL(process.env.LOCAL_APP_URL || "http://127.0.0.1:5173/");
+    const destination = new URL(process.env.PUBLIC_APP_URL || process.env.LOCAL_APP_URL || "http://127.0.0.1:5173/");
     destination.searchParams.set("chatgpt", "error");
     res.redirect(303, destination.href);
   }
@@ -127,7 +127,13 @@ app.post("/api/chatgpt/disconnect", authorize, async (_req, res, next) => {
 app.post("/api/generate-recipe", authorize, async (req, res, next) => {
   const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
   if (!name || name.length > 100) return res.status(400).json({ error: "กรอกชื่อเมนู ไม่เกิน 100 ตัวอักษร" });
-  try { res.json(await generateRecipe(name)); }
+  try {
+    const cached = req.body?.refresh === true ? null : await getRecipeDraft(name);
+    if (cached) return res.json({ ...cached, cached: true });
+    const generated = await generateRecipe(name);
+    await saveRecipeDraft(name, generated);
+    res.json({ ...generated, cached: false });
+  }
   catch (error) {
     if (error.publicMessage) {
       console.error("Recipe generation failed:", error.message);

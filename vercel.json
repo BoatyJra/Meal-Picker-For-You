@@ -3,6 +3,7 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "rewrites": [{ "source": "/auth/chatgpt/callback", "destination": "/api/chatgpt-callback" }],
   "git": { "deploymentEnabled": { "dev": false } },
   "functions": { "api/*.js": { "maxDuration": 60 } }
 }

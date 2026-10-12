@@ -32,6 +32,8 @@ export async function initializeDatabase() {
       "CREATE TABLE IF NOT EXISTS recipes (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE UNIQUE, body TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS menus (id INTEGER PRIMARY KEY AUTOINCREMENT, mode TEXT NOT NULL, name TEXT NOT NULL COLLATE NOCASE, body TEXT NOT NULL, UNIQUE(mode, name))",
       "CREATE TABLE IF NOT EXISTS favorites (menu_id INTEGER PRIMARY KEY)",
+      "CREATE TABLE IF NOT EXISTS recipe_drafts (cache_key TEXT PRIMARY KEY, body TEXT NOT NULL, created_at INTEGER NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS app_state (name TEXT PRIMARY KEY, body TEXT NOT NULL, updated_at INTEGER NOT NULL)",
       "CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY)",
       ], "write");
       const migration = await db.execute("SELECT name FROM migrations WHERE name = 'all-menus-v1'");
@@ -64,6 +66,39 @@ export async function setFavorite(menuId, favorite) {
   if (favorite) await getClient().execute({ sql: "INSERT OR IGNORE INTO favorites (menu_id) VALUES (?)", args: [menuId] });
   else await getClient().execute({ sql: "DELETE FROM favorites WHERE menu_id = ?", args: [menuId] });
   return { menuId, favorite };
+}
+
+function recipeCacheKey(name) {
+  return name.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("th");
+}
+
+export async function getRecipeDraft(name) {
+  await initializeDatabase();
+  const result = await getClient().execute({ sql: "SELECT body FROM recipe_drafts WHERE cache_key = ?", args: [recipeCacheKey(name)] });
+  return result.rows.length ? JSON.parse(result.rows[0].body) : null;
+}
+
+export async function saveRecipeDraft(name, draft) {
+  await initializeDatabase();
+  await getClient().execute({
+    sql: "INSERT INTO recipe_drafts (cache_key, body, created_at) VALUES (?, ?, ?) ON CONFLICT(cache_key) DO UPDATE SET body = excluded.body, created_at = excluded.created_at",
+    args: [recipeCacheKey(name), JSON.stringify(draft), Date.now()],
+  });
+  return draft;
+}
+
+export async function getAppState(name) {
+  await initializeDatabase();
+  const result = await getClient().execute({ sql: "SELECT body FROM app_state WHERE name = ?", args: [name] });
+  return result.rows.length ? String(result.rows[0].body) : null;
+}
+
+export async function setAppState(name, body) {
+  await initializeDatabase();
+  await getClient().execute({
+    sql: "INSERT INTO app_state (name, body, updated_at) VALUES (?, ?, ?) ON CONFLICT(name) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at",
+    args: [name, body, Date.now()],
+  });
 }
 
 export async function insertMenu(recipe) {

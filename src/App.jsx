@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Heart, Utensils, CakeSlice, CookingPot, Shuffle, Copy, Check, ChevronDown,
-  Plus, ArrowUpRight, Users, ShoppingBasket, List, Search, X, LoaderCircle, LockKeyhole, Download, Pencil, Trash2, Save, SlidersHorizontal, Sparkles, LogIn, LogOut } from "lucide-react";
+  Plus, ArrowUpRight, Users, ShoppingBasket, List, Search, X, LoaderCircle, LockKeyhole, Download, Pencil, Trash2, Save, SlidersHorizontal, Sparkles, LogIn, LogOut, RefreshCw } from "lucide-react";
 import { foodMenus, snackMenus, homeMenus } from "./menus.js";
 import { validateRecipe, validateMenu, recipeText, tiktokVideoId } from "./recipe-schema.js";
 import { menuArt, categoryArt, randomCategoryArt } from "./menu-art.js";
@@ -64,6 +64,7 @@ function MenuForm({ initial, operation, onSave, onClose, busy }) {
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
   const [sources, setSources] = useState([]);
+  const [generationStatus, setGenerationStatus] = useState(null);
   const [chatGPT, setChatGPT] = useState({ loading: true });
   const [chatGPTBusy, setChatGPTBusy] = useState(false);
   const dialog = useRef(null);
@@ -84,7 +85,7 @@ function MenuForm({ initial, operation, onSave, onClose, busy }) {
       .catch(() => { if (active) setChatGPT({ loading: false, available: false }); });
     return () => { active = false; };
   }, []);
-  function field(name, value) { setForm((current) => ({ ...current, [name]: value })); if (name === "name") setSources([]); setError(""); }
+  function field(name, value) { setForm((current) => ({ ...current, [name]: value })); if (name === "name") { setSources([]); setGenerationStatus(null); } setError(""); }
   async function connectChatGPT() {
     setChatGPTBusy(true); setError("");
     try {
@@ -100,16 +101,17 @@ function MenuForm({ initial, operation, onSave, onClose, busy }) {
     } catch (cause) { setError(cause.message); }
     finally { setChatGPTBusy(false); }
   }
-  async function generate() {
+  async function generate(refresh = false) {
     const name = form.name.trim();
     if (!name) { setError("กรอกชื่อเมนูก่อนสร้างสูตร"); return; }
     setGenerating(true); setError(""); setSources([]);
     try {
-      const result = await api("/api/generate-recipe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, password: form.password }) });
+      const result = await api("/api/generate-recipe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, refresh, password: form.password }) });
       if (!result?.recipe || validateMenu(result.recipe)) throw new Error("สูตรที่สร้างมายังไม่สมบูรณ์ ลองใหม่อีกครั้งนะ");
       setForm((current) => ({ ...current, mode: "home", name: result.recipe.name, category: result.recipe.category,
         video: result.recipe.video, ingredients: result.recipe.ingredients.join("\n"), steps: result.recipe.steps.join("\n") }));
       setSources(Array.isArray(result.sources) ? result.sources : []);
+      setGenerationStatus(result.cached ? "cached" : "fresh");
     } catch (cause) { setError(cause.message); }
     finally { setGenerating(false); }
   }
@@ -140,7 +142,8 @@ function MenuForm({ initial, operation, onSave, onClose, busy }) {
             : chatGPT.hostedApprovalRequired ? <div><strong>ChatGPT Plus บน Vercel ยังรอสิทธิ์ OAuth</strong><span>{chatGPT.apiKeyConfigured ? "ตอนนี้ระบบจะใช้ OpenAI API key แทน" : "ตั้ง OpenAI API key ชั่วคราว หรือขอ Hosted OAuth client จาก OpenAI"}</span></div>
               : <div><strong>ChatGPT Plus ไม่พร้อมใช้งาน</strong><span>{chatGPT.apiKeyConfigured ? "ตอนนี้ระบบจะใช้ OpenAI API key แทน" : "เปิด SIWC สำหรับเซิร์ฟเวอร์ local หรือตั้ง OpenAI API key"}</span></div>}
       </div>}
-      {form.mode === "home" && <button className="ai-generate" type="button" disabled={busy || generating} onClick={generate}>{generating ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />} {generating ? "กำลังค้นหาและสร้างสูตร…" : "สร้างสูตรด้วย AI"}</button>}
+      {form.mode === "home" && <button className="ai-generate" type="button" disabled={busy || generating} onClick={() => generate(false)}>{generating ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />} {generating ? "กำลังค้นหาและสร้างสูตร…" : "สร้างสูตรด้วย AI"}</button>}
+      {generationStatus && <div className="ai-cache-status" role="status"><span>{generationStatus === "cached" ? "ใช้สูตรที่บันทึกไว้ ช่วยประหยัดเครดิตและเปิดได้เร็วขึ้น" : "สร้างสูตรใหม่และบันทึกไว้แล้ว"}</span><button type="button" disabled={busy || generating} onClick={() => generate(true)}><RefreshCw size={14} /> สร้างใหม่</button></div>}
       {sources.length > 0 && <div className="ai-sources"><span>แหล่งข้อมูลที่ AI ใช้</span><ul>{sources.map((source) => <li key={source.url}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a></li>)}</ul></div>}
       {error && <p className="error-message" role="alert">{error}</p>}
       <button className={`button-primary ${removing ? "danger-button" : ""}`} type="submit" disabled={busy}>{busy ? <LoaderCircle className="spin" size={18} /> : removing ? <Trash2 size={18} /> : <Save size={18} />} {busy ? "กำลังบันทึก…" : removing ? "ยืนยันลบเมนู" : "บันทึกเมนู"}</button>

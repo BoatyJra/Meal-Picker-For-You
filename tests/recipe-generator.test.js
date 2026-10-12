@@ -1,6 +1,63 @@
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { generateRecipe, generatorInternals } from "../server/recipe-generator.js";
+
+test("POST /api/generate-recipe reuses a normalized persistent recipe draft", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "meal-picker-recipe-cache-"));
+  const previous = {
+    DATA_DIR: process.env.DATA_DIR,
+    RECIPE_PASSWORD: process.env.RECIPE_PASSWORD,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    SIWC_LOCAL_ENABLED: process.env.SIWC_LOCAL_ENABLED,
+  };
+  process.env.DATA_DIR = directory;
+  process.env.RECIPE_PASSWORD = "cache-test-password";
+  process.env.OPENAI_API_KEY = "test-key";
+  process.env.SIWC_LOCAL_ENABLED = "false";
+  const nativeFetch = globalThis.fetch;
+  let providerCalls = 0;
+  mock.method(globalThis, "fetch", async (url) => {
+    assert.equal(url, "https://api.openai.com/v1/responses");
+    providerCalls += 1;
+    const recipe = { category: "อาหารจานเดียว", ingredients: ["ข้าวสวย 300 กรัม"], steps: ["ผัดจนสุกทั่ว"] };
+    return new Response(JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(recipe) }] }] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+  const { default: app } = await import(`../server/app.js?cache-test=${Date.now()}`);
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  const url = `http://127.0.0.1:${server.address().port}/api/generate-recipe`;
+  const request = (name, refresh = false) => nativeFetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, refresh, password: "cache-test-password" }),
+  });
+  try {
+    const first = await (await request("  ผัดกะเพรา  ")).json();
+    const second = await (await request("ผัดกะเพรา")).json();
+    assert.equal(first.cached, false);
+    assert.equal(second.cached, true);
+    assert.equal(second.recipe.name, "ผัดกะเพรา");
+    assert.deepEqual(second.recipe, first.recipe);
+    assert.equal(providerCalls, 1);
+    const refreshed = await (await request("ผัดกะเพรา", true)).json();
+    assert.equal(refreshed.cached, false);
+    assert.equal(providerCalls, 2);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    mock.restoreAll();
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("Recipe generator requests web search and returns a validated recipe with a sourced TikTok link", async () => {
   const previousKey = process.env.OPENAI_API_KEY;
